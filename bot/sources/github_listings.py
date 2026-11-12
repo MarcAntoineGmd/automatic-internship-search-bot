@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 
 import httpx
 
@@ -90,7 +91,11 @@ class GitHubListingsSource(Source):
             raise SourceFetchError(f"Unexpected listings format at {self.url}")
         jobs: list[Job] = []
         unresolved: list[dict] = []
+        last_yield = time.perf_counter()
         for raw in data:
+            if time.perf_counter() - last_yield > 0.02:  # keep Discord commands responsive
+                await asyncio.sleep(0)
+                last_yield = time.perf_counter()
             if not isinstance(raw, dict) or not raw.get("id") or not raw.get("title"):
                 continue
             if not self._is_candidate(raw):

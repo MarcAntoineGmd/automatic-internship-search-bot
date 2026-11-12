@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -160,12 +161,29 @@ class Database:
         with self._lock:
             if self.path != ":memory:":
                 self.conn.execute("PRAGMA journal_mode=WAL")
+                self.conn.execute("PRAGMA synchronous=NORMAL")  # WAL-safe; avoids an fsync per write
             self.conn.execute("PRAGMA foreign_keys=ON")
             self.conn.executescript(SCHEMA)
 
     def close(self) -> None:
         with self._lock:
             self.conn.close()
+
+    @contextmanager
+    def transaction(self):
+        """Group many writes into one commit (much faster, esp. on Windows)."""
+        with self._lock:
+            if self.conn.in_transaction:
+                yield
+                return
+            self.conn.execute("BEGIN")
+            try:
+                yield
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
+            else:
+                self.conn.execute("COMMIT")
 
     def _exec(self, sql: str, params=()) -> sqlite3.Cursor:
         with self._lock:

@@ -121,6 +121,7 @@ class Scanner:
 
         baseline_candidates: list[tuple[int, int]] = []  # (score, job_id)
         now = self.now()
+        pending: list[tuple[SourceResult, Job]] = []
         for res in sorted(results, key=lambda r: (r.source.priority, r.source.id)):
             if not res.ok:
                 report.sources_failed += 1
@@ -128,14 +129,25 @@ class Scanner:
                 continue
             report.sources_ok += 1
             report.jobs_fetched += len(res.jobs)
-            for job in res.jobs:
-                try:
-                    outcome = self._process(job, now, res.source.id in baseline_sources, baseline_candidates, report)
-                except Exception:  # one malformed job must not kill the scan
-                    log.exception("Failed to process job %s", job.uid)
-                    continue
-                if outcome == "new":
-                    res.new_jobs += 1
+            pending.extend((res, job) for job in res.jobs)
+        # Work in ~50 ms batches (one DB transaction each) and yield to the event loop in between,
+        # so Discord commands still get answered within their 3-second limit during a scan.
+        i = 0
+        while i < len(pending):
+            deadline = time.perf_counter() + 0.02
+            with self.db.transaction():
+                while i < len(pending) and time.perf_counter() < deadline:
+                    res, job = pending[i]
+                    i += 1
+                    try:
+                        outcome = self._process(job, now, res.source.id in baseline_sources,
+                                                baseline_candidates, report)
+                    except Exception:  # one malformed job must not kill the scan
+                        log.exception("Failed to process job %s", job.uid)
+                        continue
+                    if outcome == "new":
+                        res.new_jobs += 1
+            await asyncio.sleep(0)
         for res in results:
             self.db.record_source_check(report.scan_id, res.source.id, res.ok, res.started_at or now,
                                         res.duration_ms, jobs_fetched=len(res.jobs), new_jobs=res.new_jobs,
@@ -144,9 +156,10 @@ class Scanner:
         # Initial import of a source: keep only the best few as notifications, store the rest silently.
         if baseline_candidates:
             baseline_candidates.sort(reverse=True)
-            for _, job_id in baseline_candidates[s.baseline_notify_limit:]:
-                self.db.mark_notified(job_id, status="baseline", now=now)
-                report.baseline_job_ids.append(job_id)
+            with self.db.transaction():
+                for _, job_id in baseline_candidates[s.baseline_notify_limit:]:
+                    self.db.mark_notified(job_id, status="baseline", now=now)
+                    report.baseline_job_ids.append(job_id)
 
         report.finished_at = self.now()
         self.db.finish_scan(report.scan_id, sources_ok=report.sources_ok, sources_failed=report.sources_failed,

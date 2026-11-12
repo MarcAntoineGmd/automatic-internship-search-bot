@@ -103,7 +103,7 @@ class HttpClient:
             return cached[1], True
         self._check(resp, url)
         try:
-            parsed = parse(resp)
+            parsed = await asyncio.to_thread(parse, resp)  # big files (13 MB JSON) parse off the event loop
         except ValueError as exc:
             raise SourceFetchError(f"Could not parse response from {url}") from exc
         etag = resp.headers.get("ETag")
