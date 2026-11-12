@@ -1,6 +1,6 @@
 # Canadian SWE Internship Radar
 
-A personal Discord bot that checks ~110 job sources every 30 minutes and sends you a **private DM** when a new
+A personal Discord bot that checks ~110 job sources every 30 minutes and sends you a **DM** when a new
 Canadian software-engineering internship or co-op shows up. Québec/Ontario and Summer 2027 get the highest priority.
 Filtering is deterministic (no LLM, no paid APIs). Every job is notified **at most once**, including after restarts.
 
