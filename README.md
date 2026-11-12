@@ -72,6 +72,11 @@ From then on every new match is posted in that channel, and DMs stop. **`/notify
 You can also set `NOTIFY_CHANNEL_ID` in `.env` (right-click the channel → **Copy Channel ID**). If you've used `/notify_here` or `/notify_dm`, the command's choice wins over `.env`.
 Jobs already notified are never re-posted when you switch.
 
+### Full list of everything found
+After every scan the bot rewrites **`internships.html`** in the project folder. It lists every match found since the first run, best first, with a **NEW** badge on the last 24 h.
+Open it once in your browser (e.g. `file:///D:/automatic-internship-search-bot/internships.html`), bookmark it, and refresh it whenever you like.
+The file is git-ignored because it includes your application statuses. Set `EXPORT_HTML_PATH=` (empty) in `.env` to turn it off. `/export` sends the same list in Discord.
+
 ### Manual DM verification (real Discord)
 1. Fill in `.env` and run `python -m bot`. The log should show `Logged in as …` and `Synced 8 slash commands to guild …`.
 2. Run `/subscribe` in your server and check that the reply says *Subscribed*.
@@ -150,6 +155,7 @@ All settings are listed in `.env.example`. The main ones:
 | `MAX_DMS_PER_SCAN`, `BASELINE_NOTIFY_LIMIT` | 25, 10 | Protection against floods of DMs |
 | `DAILY_SUMMARY_ENABLED`, `DAILY_SUMMARY_HOUR`, `TIMEZONE` | false, 9, America/Toronto | Optional daily digest |
 | `SOURCES_FILE` | sources.toml | Source list |
+| `EXPORT_HTML_PATH` | internships.html | Growing list of every match, rewritten after each scan (empty = off) |
 
 The real `.env` is in `.gitignore`. Never commit it.
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 import csv
 import html
 import io
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .db import JobRow
@@ -42,14 +44,19 @@ def to_csv(jobs: list[JobRow], tz: str = "America/Toronto") -> bytes:
 
 
 def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | None = None) -> bytes:
-    now = now or datetime.now(ZoneInfo(tz))
+    now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(tz))
     head = "".join(f"<th onclick='sortBy({i})'>{html.escape(c)}</th>" for i, c in enumerate(COLUMNS[:-1]))
     body = []
+    recent = now.astimezone(timezone.utc) - timedelta(hours=24)
+    new_count = 0
     for j in jobs:
         cells = _row(j, tz)
         url = cells.pop()
-        cells[4] = f"<a href='{html.escape(url, quote=True)}' target='_blank' rel='noopener'>{html.escape(cells[4])}</a>" \
-            if url else html.escape(cells[4])
+        is_new = bool(j.date_discovered and j.date_discovered >= recent)
+        new_count += is_new
+        badge = "<span class='badge'>NEW</span> " if is_new else ""
+        cells[4] = badge + (f"<a href='{html.escape(url, quote=True)}' target='_blank' rel='noopener'>{html.escape(cells[4])}</a>"
+                            if url else html.escape(cells[4]))
         tds = "".join(f"<td>{c}</td>" if i == 4 else f"<td>{html.escape(c)}</td>" for i, c in enumerate(cells))
         body.append(f"<tr class='{html.escape(j.priority.lower())}'>{tds}</tr>")
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -64,11 +71,12 @@ th{{position:sticky;top:0;background:#f6f8fa;cursor:pointer;white-space:nowrap}}
 td:nth-child(5){{min-width:240px}} td:nth-child(6){{max-width:220px}} td:nth-child(11),td:nth-child(12){{white-space:nowrap}}
 tr.high td:nth-child(3){{color:#1a7f37;font-weight:600}} tr.medium td:nth-child(3){{color:#9a6700}}
 tr.low td:nth-child(3){{color:#6e7781}} a{{color:#0969da}}
+.badge{{background:#1a7f37;color:#fff;border-radius:4px;padding:0 5px;font-size:11px;font-weight:600}}
 @media (prefers-color-scheme:dark){{body{{background:#0d1117;color:#e6edf3}} th{{background:#161b22}}
 th,td{{border-color:#30363d}} a{{color:#4493f8}} input{{background:#0d1117;color:#e6edf3;border-color:#30363d}}}}
 </style></head><body>
 <h1>Canadian SWE Internship Radar — {len(jobs)} stored matches</h1>
-<p>Exported {html.escape(now.strftime('%Y-%m-%d %H:%M'))}. Click a column to sort; type to filter.</p>
+<p>Updated {html.escape(now.strftime('%Y-%m-%d %H:%M'))} · {new_count} new in the last 24 h · Click a column to sort; type to filter.</p>
 <input id="q" placeholder="Filter (company, title, city, term…)" oninput="filter()">
 <div class="wrap"><table id="t"><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>
 <script>
@@ -80,3 +88,15 @@ rows.sort((a,b)=>{{const x=a.cells[i].textContent,y=b.cells[i].textContent;
 return (num?(Number(x)-Number(y)):x.localeCompare(y))*dir;}});rows.forEach(r=>tb.appendChild(r));}}
 </script></body></html>"""
     return page.encode("utf-8")
+
+
+def write_html_export(jobs: list[JobRow], path: str | Path, tz: str = "America/Toronto",
+                      now: datetime | None = None) -> Path:
+    """Write the HTML list atomically, so a browser refresh never sees a half-written file."""
+    target = Path(path)
+    if target.parent and not target.parent.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_bytes(to_html(jobs, tz, now))
+    os.replace(tmp, target)
+    return target

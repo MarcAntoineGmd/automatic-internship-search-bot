@@ -172,6 +172,13 @@ class Scanner:
                 self.db.add_notifications_to_scan(report.scan_id, report.notifications_sent)
             except Exception:
                 log.exception("Notification delivery failed")
+        if s.export_html_path:
+            try:
+                from .export import write_html_export
+
+                write_html_export(self.db.all_jobs(), s.export_html_path, s.timezone, now=self.now())
+            except Exception:
+                log.exception("Could not write %s", s.export_html_path)
         log.info("Scan %s (%s): %s", report.scan_id, trigger, report.summary())
         return report
 

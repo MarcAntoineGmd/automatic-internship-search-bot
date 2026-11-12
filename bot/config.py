@@ -64,6 +64,7 @@ class Settings:
     source_concurrency: int = 6
     max_detail_requests_per_source: int = 40
     user_agent: str = "CanadianInternshipRadar/1.0 (personal job-alert bot)"
+    export_html_path: str | None = "internships.html"  # rewritten after every scan; None/empty = off
 
     @property
     def database_path(self) -> str:
@@ -117,6 +118,7 @@ def load_settings(env: dict[str, str] | None = None, load_dotenv_file: bool = Tr
         http_max_retries=_int(g("HTTP_MAX_RETRIES"), 3),
         source_concurrency=max(1, _int(g("SOURCE_CONCURRENCY"), 6)),
         max_detail_requests_per_source=_int(g("MAX_DETAIL_REQUESTS_PER_SOURCE"), 40),
+        export_html_path=(g("EXPORT_HTML_PATH") if g("EXPORT_HTML_PATH") is not None else "internships.html") or None,
     )
     return s
 

@@ -9,3 +9,6 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+internships.html
+internships.html.tmp
+internships.csv

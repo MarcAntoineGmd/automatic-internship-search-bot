@@ -42,3 +42,34 @@ def test_latest_paging(db):
     assert len(page1) == 25 and len(page2) == 5
     assert {j.id for j in page1} | {j.id for j in page2} == set(ids)
     assert len(db.all_jobs()) == 30
+
+
+async def test_scan_rewrites_growing_html_list(settings, db, tmp_path):
+    from bot.scanner import Scanner
+    from tests.test_scanner import FakeSource, make_http_dummy
+
+    settings.export_html_path = str(tmp_path / "internships.html")
+    src = FakeSource("a", [make_job(source="fake:a", source_job_id="1", url="https://e.example/j/1")])
+    scanner = Scanner(settings, db, [src], make_http_dummy(), now=lambda: NOW)
+    await scanner.run()
+    first = (tmp_path / "internships.html").read_text(encoding="utf-8")
+    assert "1 stored matches" in first and "NEW" in first
+    src.jobs.append(make_job(source="fake:a", source_job_id="2", title="Backend Developer Co-op",
+                             url="https://e.example/j/2"))
+    await scanner.run()
+    second = (tmp_path / "internships.html").read_text(encoding="utf-8")
+    assert "2 stored matches" in second  # the list only grows
+    assert not (tmp_path / "internships.html.tmp").exists()
+
+
+async def test_export_can_be_disabled(settings, db, tmp_path, monkeypatch):
+    from bot.config import load_settings
+    from bot.scanner import Scanner
+    from tests.test_scanner import FakeSource, make_http_dummy
+
+    assert load_settings(env={"EXPORT_HTML_PATH": ""}).export_html_path is None
+    assert load_settings(env={}).export_html_path == "internships.html"
+    monkeypatch.chdir(tmp_path)
+    settings.export_html_path = None
+    await Scanner(settings, db, [FakeSource("a", [make_job()])], make_http_dummy(), now=lambda: NOW).run()
+    assert not (tmp_path / "internships.html").exists()
