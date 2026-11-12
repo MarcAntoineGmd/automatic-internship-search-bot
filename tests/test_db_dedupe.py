@@ -1,0 +1,115 @@
+"""Duplicate detection and persistence across restarts."""
+from __future__ import annotations
+
+from bot.classify import FilterConfig, classify
+from bot.db import Database
+from tests.conftest import NOW, make_job
+
+
+def store(db, job):
+    cls = classify(job, FilterConfig(), now=NOW)
+    assert cls.included, cls.exclusion_reason
+    dup = db.find_duplicate(job, term=cls.term, provinces=cls.provinces)
+    if dup is not None:
+        db.touch(dup, job)
+        return dup, False
+    return db.insert_job(job, cls), True
+
+
+def test_same_uid_is_duplicate(db):
+    j = make_job()
+    _, new1 = store(db, j)
+    _, new2 = store(db, make_job())
+    assert new1 and not new2
+    assert db.count_jobs() == 1
+
+
+def test_cross_source_duplicate_by_ats_url(db):
+    ats = make_job(source="greenhouse:lyft", source_job_id="8796054002", company="Lyft",
+                   title="Software Engineer Intern - Backend (Summer 2027)",
+                   url="https://job-boards.greenhouse.io/lyft/jobs/8796054002", extra_keys=["greenhouse:8796054002"])
+    agg = make_job(source="github_listings:simplify", source_job_id="s1", company="Lyft",
+                   title="Software Engineer Intern, Backend",
+                   url="https://app.careerpuck.com/job-board/lyft/job/8796054002?gh_jid=8796054002&utm_source=Simplify",
+                   assume_internship=True)
+    id1, new1 = store(db, ats)
+    id2, new2 = store(db, agg)
+    assert new1 and not new2 and id1 == id2
+    row = db.get_job(id1)
+    assert row.also_seen_on == ["github_listings:simplify"]
+
+
+def test_cross_source_duplicate_by_fingerprint(db):
+    a = make_job(source="ashby:x", source_job_id="a", company="RBC", title="Developer Intern (Summer 2027)",
+                 url="https://careers.rbc.example/a/1")
+    b = make_job(source="markdown_table:y", source_job_id="b", company="Royal Bank of Canada",
+                 title="Developer Intern - Summer 2027", url="https://other.example/x/2", location="Toronto, ON")
+    _, n1 = store(db, a)
+    _, n2 = store(db, b)
+    assert n1 and not n2
+
+
+def test_different_term_is_not_a_duplicate(db):
+    a = make_job(source_job_id="w", title="Software Developer Co-op (Winter 2027)", url="https://e.example/j/1")
+    b = make_job(source_job_id="s", title="Software Developer Co-op (Summer 2027)", url="https://e.example/j/2")
+    _, n1 = store(db, a)
+    _, n2 = store(db, b)
+    assert n1 and n2
+
+
+def test_different_province_is_not_a_duplicate(db):
+    a = make_job(source_job_id="1", title="Software Developer Intern", url="https://e.example/j/1", location="Montreal, QC")
+    b = make_job(source_job_id="2", title="Software Developer Intern", url="https://e.example/j/2", location="Vancouver, BC")
+    assert store(db, a)[1] and store(db, b)[1]
+
+
+def test_generic_careers_url_does_not_merge_different_roles(db):
+    a = make_job(source_job_id="1", title="Software Developer Intern", url="https://acme.example/careers")
+    b = make_job(source_job_id="2", title="Data Engineer Intern", url="https://acme.example/careers")
+    assert store(db, a)[1] and store(db, b)[1]
+
+
+def test_reappearing_job_is_not_new(db):
+    j = make_job()
+    job_id, _ = store(db, j)
+    db.mark_notified(job_id, "sent")
+    # job disappears from the source for a while, then reappears
+    _, new = store(db, make_job())
+    assert not new
+    assert db.get_job(job_id).notify_status == "sent"
+
+
+def test_persistence_across_restarts(tmp_path):
+    path = tmp_path / "persist.db"
+    db1 = Database(path)
+    job_id, _ = store(db1, make_job())
+    db1.mark_notified(job_id, "sent")
+    db1.subscribe(999)
+    db1.set_meta("owner_id", "999")
+    db1.add_rejected("test:board:zzz", "not an internship")
+    db1.close()
+
+    db2 = Database(path)  # "restart"
+    assert db2.count_jobs() == 1 and db2.count_notified() == 1
+    assert db2.is_known_uid("test:board:1") and db2.is_known_uid("test:board:zzz")
+    assert db2.is_subscribed(999) and db2.get_meta("owner_id") == "999"
+    assert db2.pending_notifications(0, 30, 10, now=NOW) == []
+    _, new = store(db2, make_job())
+    assert not new
+    db2.close()
+
+
+def test_rejected_cache_cleared_when_filters_change(db):
+    db.sync_filter_signature("a")
+    db.add_rejected("x:1", "nope")
+    assert db.is_rejected("x:1")
+    assert db.sync_filter_signature("a") is False and db.is_rejected("x:1")
+    assert db.sync_filter_signature("b") is True and not db.is_rejected("x:1")
+
+
+def test_application_status(db):
+    job_id, _ = store(db, make_job())
+    assert db.set_application_status(job_id, "applied")
+    assert db.get_job(job_id).application_status == "applied"
+    assert db.application_counts() == {"applied": 1}
+    assert not db.set_application_status(9999, "applied")

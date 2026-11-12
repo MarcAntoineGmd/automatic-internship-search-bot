@@ -1,0 +1,18 @@
+# systemd unit for a Linux VPS / Raspberry Pi.
+# Install: sudo cp deploy/internship-radar.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#          sudo systemctl enable --now internship-radar && journalctl -u internship-radar -f
+[Unit]
+Description=Canadian SWE Internship Radar (Discord bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radar
+WorkingDirectory=/opt/internship-radar
+ExecStart=/opt/internship-radar/.venv/bin/python -m bot
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

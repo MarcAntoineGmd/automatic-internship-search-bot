@@ -1,0 +1,14 @@
+{
+ "id": "744000160900001",
+ "jobAd": {
+  "sections": {
+   "jobDescription": {
+    "title": "Job Description",
+    "text": "<p>Programmer des fonctionnalit\u00e9s de jeu en C++.</p>"
+   },
+   "qualifications": {
+    "text": "<p>\u00c9tudiant(e) en g\u00e9nie logiciel ou informatique.</p>"
+   }
+  }
+ }
+}

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Blocks commits that would publish the Discord token.
+if git diff --cached --name-only | grep -qx '.env'; then
+  echo "BLOCKED: .env must never be committed (it holds your bot token)."; exit 1
+fi
+if git show :.env.example 2>/dev/null | grep -Eq '^DISCORD_BOT_TOKEN=[^[:space:]#]+'; then
+  echo "BLOCKED: .env.example contains a token. Put it in .env and leave DISCORD_BOT_TOKEN= empty in .env.example."; exit 1
+fi
+exit 0

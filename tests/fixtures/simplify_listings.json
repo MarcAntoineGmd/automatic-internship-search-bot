@@ -1,0 +1,93 @@
+[
+ {
+  "source": "Simplify",
+  "category": "Software",
+  "company_name": "Lyft",
+  "id": "s-lyft-1",
+  "title": "Software Engineer Intern - Backend",
+  "active": true,
+  "terms": [
+   "Summer 2027"
+  ],
+  "date_updated": 1794450995,
+  "date_posted": 1794442230,
+  "url": "https://app.careerpuck.com/job-board/lyft/job/8796054002?gh_jid=8796054002&utm_source=Simplify&ref=Simplify",
+  "locations": [
+   "Toronto, ON, Canada"
+  ],
+  "company_url": "",
+  "is_visible": true,
+  "sponsorship": "Other",
+  "degrees": [
+   "Bachelor's"
+  ]
+ },
+ {
+  "source": "Simplify",
+  "category": "Hardware",
+  "company_name": "Lightmatter",
+  "id": "s-lm-1",
+  "title": "Package Layout Automation Intern",
+  "active": true,
+  "terms": [
+   "Summer 2027"
+  ],
+  "date_posted": 1794442230,
+  "url": "https://boards.greenhouse.io/lightmatter/jobs/5473740008",
+  "locations": [
+   "Mountain View, CA"
+  ],
+  "is_visible": true
+ },
+ {
+  "source": "Simplify",
+  "category": "Software",
+  "company_name": "SOTI",
+  "id": "s-soti-1",
+  "title": "Software Developer Intern",
+  "active": true,
+  "terms": [
+   "Summer 2027"
+  ],
+  "date_posted": 1794268800,
+  "url": "https://soti.wd3.myworkdayjobs.com/SOTI-Next-Gen/job/Mississauga-Canada/Software-Developer-Intern_R10611?utm_source=Simplify",
+  "locations": [
+   "Mississauga, ON, Canada"
+  ],
+  "is_visible": true
+ },
+ {
+  "source": "Simplify",
+  "category": "Software",
+  "company_name": "Closed Co",
+  "id": "s-closed-1",
+  "title": "Software Engineer Intern",
+  "active": false,
+  "terms": [
+   "Summer 2027"
+  ],
+  "date_posted": 1794268800,
+  "url": "https://example.com/jobs/1",
+  "locations": [
+   "Toronto, ON, Canada"
+  ],
+  "is_visible": true
+ },
+ {
+  "source": "Simplify",
+  "category": "Product",
+  "company_name": "Bank of Montreal",
+  "id": "s-bmo-1",
+  "title": "Treasury & Payment Solutions Strategy Intern",
+  "active": true,
+  "terms": [
+   "Spring 2027"
+  ],
+  "date_posted": 1794268800,
+  "url": "https://bmo.wd3.myworkdayjobs.com/External/job/Toronto/Treasury_R260001",
+  "locations": [
+   "Toronto, ON, Canada"
+  ],
+  "is_visible": true
+ }
+]

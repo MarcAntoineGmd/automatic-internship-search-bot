@@ -1,0 +1,448 @@
+# Job sources for the Canadian SWE Internship Radar.
+#
+# Every [[kind]] table is one independent source. Set `enabled = false` to turn one off.
+# `assume_country = "Canada"` tells the filter that a board only hires in Canada (used when a
+# posting's location text is vague, e.g. "Hybrid").
+#
+# Verification (2026-11-11):
+#   (live)   = board id confirmed by calling the public API; board had Canadian postings.
+#   (simplify) = id taken from real application URLs in the SimplifyJobs / vanshb03 trackers.
+# Board ids change occasionally; a broken one shows up under "Source errors" in /status.
+
+# ============================================================================ Aggregators
+# Largest source of Canadian postings, including companies without a supported ATS
+# (Shopify, Google, Microsoft, Amazon, AMD, Qualcomm, Nokia, IBM, National Bank, ...).
+
+[[github_listings]]
+name = "simplify-summer2027"
+company = "SimplifyJobs"
+url = "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json"
+
+[[github_listings]]
+name = "vanshb03-summer2027"
+company = "vanshb03"
+url = "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/.github/scripts/listings.json"
+resolve_redirects = true   # its links are go.vansh.nyc short links; resolve them for de-duplication
+
+[[github_listings]]
+name = "simplify-new-grad"
+company = "SimplifyJobs"
+url = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
+internships_only = false
+enabled = false            # enable together with INCLUDE_NEW_GRAD=true
+
+[[markdown_table]]
+name = "canadian-tech-internships-2027"
+company = "negarprh"
+url = "https://raw.githubusercontent.com/negarprh/Canadian-Tech-Internships-2027/main/README.md"
+assume_country = "Canada"
+
+# ============================================================================ Greenhouse
+# API: https://boards-api.greenhouse.io/v1/boards/<board>/jobs
+[[greenhouse]]
+board = "lyft"                 # (live) Toronto office, many Summer 2027 interns
+company = "Lyft"
+[[greenhouse]]
+board = "stripe"               # (live) Toronto
+company = "Stripe"
+[[greenhouse]]
+board = "pinterest"            # (live) Toronto
+company = "Pinterest"
+[[greenhouse]]
+board = "databricks"           # (live) Vancouver
+company = "Databricks"
+[[greenhouse]]
+board = "towerresearchcapital" # (live) Montréal
+company = "Tower Research Capital"
+[[greenhouse]]
+board = "hootsuite"            # (live) Vancouver / Toronto
+company = "Hootsuite"
+[[greenhouse]]
+board = "epicgames"            # (live) Montréal
+company = "Epic Games"
+[[greenhouse]]
+board = "later"                # (live) Vancouver
+company = "Later"
+[[greenhouse]]
+board = "faire"                # (live) Toronto / Waterloo
+company = "Faire"
+[[greenhouse]]
+board = "geotab"               # (live) Oakville / Toronto
+company = "Geotab"
+[[greenhouse]]
+board = "tenstorrent"          # (live) Toronto
+company = "Tenstorrent"
+[[greenhouse]]
+board = "tenstorrentuniversity" # (simplify) university board
+company = "Tenstorrent"
+[[greenhouse]]
+board = "robinhood"            # (live) Toronto
+company = "Robinhood"
+[[greenhouse]]
+board = "toast"                # (live) Toronto
+company = "Toast"
+[[greenhouse]]
+board = "samsara"              # (live) Toronto
+company = "Samsara"
+[[greenhouse]]
+board = "okta"                 # (live) Toronto
+company = "Okta"
+[[greenhouse]]
+board = "d2l"                  # (live) Kitchener-Waterloo
+company = "D2L"
+[[greenhouse]]
+board = "mongodb"              # (live) Toronto
+company = "MongoDB"
+[[greenhouse]]
+board = "coinbase"             # (live) Canada remote
+company = "Coinbase"
+[[greenhouse]]
+board = "affirm"               # (live) Canada remote
+company = "Affirm"
+[[greenhouse]]
+board = "instacart"            # (live) Toronto
+company = "Instacart"
+[[greenhouse]]
+board = "appdirect"            # (live) Montréal
+company = "AppDirect"
+[[greenhouse]]
+board = "elastic"              # (live) Canada remote
+company = "Elastic"
+[[greenhouse]]
+board = "gitlab"               # (live) Canada remote
+company = "GitLab"
+[[greenhouse]]
+board = "asana"                # (live) Vancouver
+company = "Asana"
+[[greenhouse]]
+board = "brex"                 # (live) Vancouver
+company = "Brex"
+[[greenhouse]]
+board = "dropbox"              # (live) Canada remote
+company = "Dropbox"
+[[greenhouse]]
+board = "reddit"               # (live) Toronto
+company = "Reddit"
+[[greenhouse]]
+board = "airbnb"               # (live)
+company = "Airbnb"
+[[greenhouse]]
+board = "datadog"              # (live)
+company = "Datadog"
+[[greenhouse]]
+board = "point72"              # (live)
+company = "Point72"
+[[greenhouse]]
+board = "workleap"             # (live) Montréal
+company = "Workleap"
+assume_country = "Canada"
+[[greenhouse]]
+board = "poka"                 # (live) Québec City
+company = "Poka"
+assume_country = "Canada"
+[[greenhouse]]
+board = "sharegate"            # (live) Montréal
+company = "ShareGate"
+assume_country = "Canada"
+[[greenhouse]]
+board = "uberfreight"          # (live)
+company = "Uber Freight"
+[[greenhouse]]
+board = "visiersolutionsinc"   # returned 404 on 2026-11-12 (board id changed)
+company = "Visier"
+enabled = false
+[[greenhouse]]
+board = "momentenergy"         # (simplify) Vancouver
+company = "Moment Energy"
+
+# ============================================================================ Lever
+# API: https://api.lever.co/v0/postings/<company>?mode=json
+[[lever]]
+company_id = "waabi"           # (live) Toronto
+company = "Waabi"
+[[lever]]
+company_id = "kepler"          # (live) Toronto
+company = "Kepler Communications"
+assume_country = "Canada"
+[[lever]]
+company_id = "pointclickcare"  # (live) Mississauga / Toronto
+company = "PointClickCare"
+[[lever]]
+company_id = "palantir"        # (live) Toronto
+company = "Palantir"
+[[lever]]
+company_id = "wattpad"         # (live) Toronto
+company = "Wattpad"
+[[lever]]
+company_id = "spotify"         # (live) Toronto
+company = "Spotify"
+[[lever]]
+company_id = "bhvr"            # (simplify) Montréal
+company = "Behaviour Interactive"
+
+# ============================================================================ Ashby
+# API: https://api.ashbyhq.com/posting-api/job-board/<org>
+[[ashby]]
+org = "wealthsimple"           # (live) Toronto / Montréal
+company = "Wealthsimple"
+[[ashby]]
+org = "cohere"                 # (live) Toronto / Montréal
+company = "Cohere"
+[[ashby]]
+org = "1password"              # (live) Canada remote
+company = "1Password"
+[[ashby]]
+org = "koho"                   # (live)
+company = "KOHO"
+assume_country = "Canada"
+[[ashby]]
+org = "neofinancial"           # (live) Calgary
+company = "Neo Financial"
+assume_country = "Canada"
+[[ashby]]
+org = "jane"                   # (live) Vancouver
+company = "Jane App"
+[[ashby]]
+org = "jobber"                 # (live) Edmonton / Toronto
+company = "Jobber"
+[[ashby]]
+org = "benevity"               # (live) Calgary
+company = "Benevity"
+[[ashby]]
+org = "clearco"                # (live) Toronto
+company = "Clearco"
+[[ashby]]
+org = "float"                  # (live) Toronto
+company = "Float"
+assume_country = "Canada"
+[[ashby]]
+org = "hopper"                 # (live) Montréal
+company = "Hopper"
+[[ashby]]
+org = "trulioo"                # (live) Vancouver
+company = "Trulioo"
+[[ashby]]
+org = "miovision"              # (live) Kitchener
+company = "Miovision"
+[[ashby]]
+org = "procurify"              # (live) Vancouver
+company = "Procurify"
+assume_country = "Canada"
+[[ashby]]
+org = "ramp"                   # (live)
+company = "Ramp"
+[[ashby]]
+org = "snowflake"              # (live) Toronto
+company = "Snowflake"
+[[ashby]]
+org = "telus-digital"          # (simplify)
+company = "TELUS Digital"
+[[ashby]]
+org = "harvey"                 # (live) Toronto
+company = "Harvey"
+[[ashby]]
+org = "baseten"                # (live)
+company = "Baseten"
+[[ashby]]
+org = "sierra"                 # (live) Toronto
+company = "Sierra"
+[[ashby]]
+org = "webflow"                # (live) Canada remote
+company = "Webflow"
+[[ashby]]
+org = "sentry"                 # (live) Toronto
+company = "Sentry"
+[[ashby]]
+org = "vanta"                  # (live)
+company = "Vanta"
+[[ashby]]
+org = "temporal"               # (live)
+company = "Temporal"
+[[ashby]]
+org = "perplexity"             # (live)
+company = "Perplexity"
+[[ashby]]
+org = "decagon"                # (live)
+company = "Decagon"
+[[ashby]]
+org = "rewind"                 # (live) Ottawa
+company = "Rewind"
+assume_country = "Canada"
+[[ashby]]
+org = "thinkific"              # (live) Vancouver
+company = "Thinkific"
+assume_country = "Canada"
+[[ashby]]
+org = "openai"                 # (live)
+company = "OpenAI"
+
+# ============================================================================ Workday
+# Public career-site JSON: POST https://<host>/wday/cxs/<tenant>/<site>/jobs
+# search = [""] lists every posting on a student/early-talent site; otherwise we search
+# for student keywords to keep requests small.
+[[workday]]
+company = "Royal Bank of Canada"   # (live)
+host = "rbc.wd3.myworkdayjobs.com"
+site = "RBCEARLYTALENT1"
+search = [""]
+[[workday]]
+company = "Royal Bank of Canada"   # (simplify)
+host = "rbc.wd3.myworkdayjobs.com"
+site = "rbcglobal1"
+search = ["intern", "co-op"]
+[[workday]]
+company = "TD Bank"                # (simplify)
+host = "td.wd3.myworkdayjobs.com"
+site = "TD_Bank_Careers"
+search = ["intern", "co-op", "student"]
+[[workday]]
+company = "Bank of Montreal"       # (simplify)
+host = "bmo.wd3.myworkdayjobs.com"
+site = "Campus"
+search = [""]
+[[workday]]
+company = "Bank of Montreal"       # (simplify)
+host = "bmo.wd3.myworkdayjobs.com"
+site = "External"
+search = ["intern", "co-op"]
+[[workday]]
+company = "CIBC"                   # (simplify)
+host = "cibc.wd3.myworkdayjobs.com"
+site = "campus"
+search = [""]
+[[workday]]
+company = "Desjardins"             # (simplify)
+host = "desjardins.wd10.myworkdayjobs.com"
+site = "Desjardins"
+search = ["stage", "stagiaire", "intern", "co-op"]
+assume_country = "Canada"
+[[workday]]
+company = "Intact"                 # (simplify)
+host = "intactfc.wd3.myworkdayjobs.com"
+site = "intactfc"
+search = ["intern", "co-op", "stage"]
+[[workday]]
+company = "Autodesk"               # (simplify)
+host = "autodesk.wd1.myworkdayjobs.com"
+site = "uni"
+search = [""]
+[[workday]]
+company = "NVIDIA"                 # (simplify)
+host = "nvidia.wd5.myworkdayjobs.com"
+site = "NVIDIAExternalCareerSite"
+search = ["intern"]
+[[workday]]
+company = "Thomson Reuters"        # (simplify)
+host = "thomsonreuters.wd5.myworkdayjobs.com"
+site = "External_Career_Site"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Ciena"                  # (simplify) Ottawa / Montréal / Québec City
+host = "ciena.wd5.myworkdayjobs.com"
+site = "Careers"
+search = ["intern", "co-op", "stagiaire"]
+[[workday]]
+company = "Manulife"               # (simplify)
+host = "manulife.wd3.myworkdayjobs.com"
+site = "MFCJH_Jobs"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Sun Life"               # (simplify)
+host = "sunlife.wd3.myworkdayjobs.com"
+site = "Campus"
+search = [""]
+[[workday]]
+company = "Morgan Stanley"         # (simplify) Montréal tech centre
+host = "ms.wd5.myworkdayjobs.com"
+site = "External"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Warner Bros. Games"     # (simplify) Montréal studio
+host = "warnerbros.wd5.myworkdayjobs.com"
+site = "global"
+search = ["intern", "co-op", "stagiaire"]
+[[workday]]
+company = "Cisco"                  # (simplify) Ottawa / Toronto
+host = "cisco.wd5.myworkdayjobs.com"
+site = "cisco_careers"
+search = ["intern", "co-op"]
+[[workday]]
+company = "CAE"                    # (simplify) Montréal
+host = "cae.wd3.myworkdayjobs.com"
+site = "career"
+search = ["intern", "co-op", "stage"]
+[[workday]]
+company = "BlackBerry"             # (simplify) Waterloo / Ottawa
+host = "bb.wd3.myworkdayjobs.com"
+site = "Student"
+search = [""]
+[[workday]]
+company = "Interac"                # (simplify) Toronto
+host = "interac.wd3.myworkdayjobs.com"
+site = "Interac"
+search = ["intern", "co-op"]
+[[workday]]
+company = "SOTI"                   # (simplify) Mississauga
+host = "soti.wd3.myworkdayjobs.com"
+site = "SOTI-Next-Gen"
+search = [""]
+[[workday]]
+company = "Altera"                 # (simplify) Toronto
+host = "altera.wd1.myworkdayjobs.com"
+site = "altera"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Clio"                   # (simplify) Vancouver / Toronto
+host = "clio.wd3.myworkdayjobs.com"
+site = "ClioCareerSite"
+search = ["intern", "co-op"]
+[[workday]]
+company = "OMERS"                  # (simplify) Toronto
+host = "omers.wd3.myworkdayjobs.com"
+site = "omers_external"
+search = ["intern", "co-op", "student"]
+[[workday]]
+company = "PSP Investments"        # (simplify) Montréal
+host = "investpsp.wd3.myworkdayjobs.com"
+site = "psp_careers"
+search = ["intern", "stage", "co-op"]
+[[workday]]
+company = "CDPQ"                   # (simplify) Montréal
+host = "cdpq.wd10.myworkdayjobs.com"
+site = "CDPQ"
+search = ["stage", "intern"]
+[[workday]]
+company = "Canadian Tire"          # (simplify) Toronto
+host = "canadiantirecorporation.wd3.myworkdayjobs.com"
+site = "Enterprise_External_Careers_Site"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Salesforce"             # (simplify) Toronto / Vancouver
+host = "salesforce.wd12.myworkdayjobs.com"
+site = "Futureforce_Internships"
+search = [""]
+[[workday]]
+company = "General Motors"         # (simplify) Markham / Oshawa
+host = "generalmotors.wd5.myworkdayjobs.com"
+site = "Careers_GM"
+search = ["intern", "co-op"]
+[[workday]]
+company = "Thales"                 # (simplify) Montréal / Québec City
+host = "thales.wd3.myworkdayjobs.com"
+site = "Careers"
+search = ["intern", "co-op", "stagiaire"]
+
+# ============================================================================ SmartRecruiters
+# API: https://api.smartrecruiters.com/v1/companies/<id>/postings?country=ca
+[[smartrecruiters]]
+company_id = "Ubisoft2"        # (live) Montréal / Québec City / Toronto
+company = "Ubisoft"
+country = "ca"
+[[smartrecruiters]]
+company_id = "ServiceNow"      # (simplify)
+company = "ServiceNow"
+country = "ca"
+[[smartrecruiters]]
+company_id = "Intelerad"       # (simplify) Montréal
+company = "Intelerad"
+country = "ca"

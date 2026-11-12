@@ -1,0 +1,13 @@
+services:
+  internship-radar:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/jobs.db   # keep the DB on the persistent volume
+    volumes:
+      - radar-data:/data
+      - ./sources.toml:/app/sources.toml:ro   # edit sources without rebuilding
+    restart: unless-stopped
+
+volumes:
+  radar-data:

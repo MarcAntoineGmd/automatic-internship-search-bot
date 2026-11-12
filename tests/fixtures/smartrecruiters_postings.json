@@ -1,0 +1,59 @@
+{
+ "offset": 0,
+ "limit": 100,
+ "totalFound": 2,
+ "content": [
+  {
+   "id": "744000160948279",
+   "name": "Tools Programmer Python - TGQF",
+   "releasedDate": "2026-11-10T18:49:23.111Z",
+   "company": {
+    "identifier": "Ubisoft2",
+    "name": "Ubisoft"
+   },
+   "location": {
+    "city": "Montreal",
+    "region": "QC",
+    "country": "ca",
+    "remote": false,
+    "hybrid": false,
+    "fullLocation": "Montreal, QC, Canada"
+   },
+   "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+   },
+   "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+   },
+   "ref": "https://api.smartrecruiters.com/v1/companies/Ubisoft2/postings/744000160948279"
+  },
+  {
+   "id": "744000160900001",
+   "name": "Stagiaire en programmation gameplay - \u00c9t\u00e9 2027",
+   "releasedDate": "2026-11-09T10:00:00.000Z",
+   "company": {
+    "identifier": "Ubisoft2",
+    "name": "Ubisoft"
+   },
+   "location": {
+    "city": "Quebec City",
+    "region": "QC",
+    "country": "ca",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "Quebec City, QC, Canada"
+   },
+   "typeOfEmployment": {
+    "id": "intern",
+    "label": "Stage"
+   },
+   "experienceLevel": {
+    "id": "internship",
+    "label": "Internship"
+   },
+   "ref": "https://api.smartrecruiters.com/v1/companies/Ubisoft2/postings/744000160900001"
+  }
+ ]
+}

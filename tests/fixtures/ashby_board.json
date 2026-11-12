@@ -1,0 +1,100 @@
+{
+ "apiVersion": "1",
+ "jobs": [
+  {
+   "id": "73bd3e2b-6597-4124-b64b-1e5dbc32e785",
+   "title": "Research Internship (Winter 2027)",
+   "department": "Internships",
+   "team": "Internships",
+   "employmentType": "Intern",
+   "location": "Canada",
+   "secondaryLocations": [
+    {
+     "location": "San Francisco",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "California",
+       "addressCountry": "United States",
+       "addressLocality": "San Francisco"
+      }
+     }
+    },
+    {
+     "location": "Toronto",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "Ontario",
+       "addressCountry": "Canada",
+       "addressLocality": "Toronto"
+      }
+     }
+    },
+    {
+     "location": "Montreal",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "Quebec ",
+       "addressCountry": "Canada",
+       "addressLocality": "Montreal"
+      }
+     }
+    }
+   ],
+   "publishedAt": "2026-05-01T20:26:46.572+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "address": {
+    "postalAddress": {
+     "addressCountry": "Canada"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/cohere/73bd3e2b-6597-4124-b64b-1e5dbc32e785",
+   "applyUrl": "https://jobs.ashbyhq.com/cohere/73bd3e2b-6597-4124-b64b-1e5dbc32e785/application",
+   "descriptionHtml": "<p>Train and evaluate large language models in Python.</p>",
+   "descriptionPlain": "Train and evaluate large language models in Python."
+  },
+  {
+   "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+   "title": "Software Engineer Intern - Backend (Summer 2027)",
+   "employmentType": "Intern",
+   "location": "Toronto",
+   "secondaryLocations": [],
+   "publishedAt": "2026-11-09T15:00:00.000+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "Hybrid",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "Ontario",
+     "addressCountry": "Canada",
+     "addressLocality": "Toronto"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/cohere/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+   "descriptionPlain": "Build Go and Python services."
+  },
+  {
+   "id": "ffffffff-0000-1111-2222-333333333333",
+   "title": "Staff Software Engineer",
+   "employmentType": "FullTime",
+   "location": "Toronto",
+   "isListed": true,
+   "address": {
+    "postalAddress": {
+     "addressCountry": "Canada"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/cohere/ffffffff-0000-1111-2222-333333333333",
+   "descriptionPlain": "8+ years of experience."
+  },
+  {
+   "id": "99999999-0000-1111-2222-333333333333",
+   "title": "Unlisted Intern",
+   "employmentType": "Intern",
+   "location": "Toronto",
+   "isListed": false,
+   "jobUrl": "https://jobs.ashbyhq.com/cohere/99999999-0000-1111-2222-333333333333"
+  }
+ ]
+}

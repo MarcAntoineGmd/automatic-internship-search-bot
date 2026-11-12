@@ -1,0 +1,71 @@
+{
+ "jobs": [
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/hootsuite/jobs/8359242",
+   "internal_job_id": 3612615,
+   "location": {
+    "name": "Alberta, British Columbia "
+   },
+   "metadata": [
+    {
+     "id": 25593575,
+     "name": "Pay Range - Applicant - Canada",
+     "value": {
+      "unit": "CAD",
+      "max_value": "61900.0",
+      "min_value": "53800.0"
+     },
+     "value_type": "currency_range"
+    }
+   ],
+   "id": 8359242,
+   "updated_at": "2026-11-10T12:41:01-05:00",
+   "requisition_id": "20260173",
+   "title": "Co-op/Intern, DevOps - Winter 2027",
+   "company_name": "Hootsuite",
+   "first_published": "2026-11-06T13:58:49-05:00",
+   "language": "en"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/hootsuite/jobs/8360176",
+   "internal_job_id": 3612700,
+   "location": {
+    "name": "Toronto, ON"
+   },
+   "metadata": [],
+   "id": 8360176,
+   "updated_at": "2026-11-10T12:41:01-05:00",
+   "title": "Software Developer Co-op Intern (Summer 2027)",
+   "company_name": "Hootsuite",
+   "first_published": "2026-11-07T10:00:00-05:00"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/hootsuite/jobs/8000001",
+   "internal_job_id": 3000001,
+   "location": {
+    "name": "Vancouver, BC"
+   },
+   "metadata": [],
+   "id": 8000001,
+   "updated_at": "2026-11-01T12:00:00-05:00",
+   "title": "Senior Software Engineer, Platform",
+   "company_name": "Hootsuite",
+   "first_published": "2026-10-01T10:00:00-05:00"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/hootsuite/jobs/8000002",
+   "internal_job_id": 3000002,
+   "location": {
+    "name": "Toronto, ON"
+   },
+   "metadata": [],
+   "id": 8000002,
+   "updated_at": "2026-11-01T12:00:00-05:00",
+   "title": "Marketing Intern - Summer 2027",
+   "company_name": "Hootsuite"
+  }
+ ],
+ "meta": {
+  "total": 4
+ }
+}

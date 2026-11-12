@@ -1,0 +1,61 @@
+[
+ {
+  "id": "5514238a-8301-49f1-8116-26d38ea0900c",
+  "text": "Software Engineering Intern (January 2027)",
+  "categories": {
+   "commitment": "Internship",
+   "department": "Engineering",
+   "location": "Toronto, Ontario",
+   "team": "Flight Software",
+   "allLocations": [
+    "Toronto, Ontario"
+   ]
+  },
+  "country": "CA",
+  "workplaceType": "onsite",
+  "createdAt": 1793145600000,
+  "descriptionPlain": "Kepler is building the in-space internet. You will write C++ and Python flight software.",
+  "description": "<div>Kepler is building the in-space internet.</div>",
+  "lists": [
+   {
+    "text": "Requirements",
+    "content": "<li>Currently enrolled in a Computer Engineering program</li>"
+   }
+  ],
+  "additionalPlain": "Eligible to work in Canada.",
+  "hostedUrl": "https://jobs.lever.co/kepler/5514238a-8301-49f1-8116-26d38ea0900c",
+  "applyUrl": "https://jobs.lever.co/kepler/5514238a-8301-49f1-8116-26d38ea0900c/apply"
+ },
+ {
+  "id": "11111111-2222-3333-4444-555555555555",
+  "text": "Mission Operations Specialist",
+  "categories": {
+   "commitment": "Full-time",
+   "location": "Toronto, Ontario",
+   "allLocations": [
+    "Toronto, Ontario"
+   ]
+  },
+  "country": "CA",
+  "workplaceType": "onsite",
+  "createdAt": 1790000000000,
+  "descriptionPlain": "Operate satellites.",
+  "hostedUrl": "https://jobs.lever.co/kepler/11111111-2222-3333-4444-555555555555"
+ },
+ {
+  "id": "66666666-7777-8888-9999-000000000000",
+  "text": "Software Engineer Intern",
+  "categories": {
+   "commitment": "Intern",
+   "location": "Foster City, CA",
+   "allLocations": [
+    "Foster City, CA"
+   ]
+  },
+  "country": "US",
+  "workplaceType": "onsite",
+  "createdAt": 1790000000000,
+  "descriptionPlain": "Autonomous driving.",
+  "hostedUrl": "https://jobs.lever.co/kepler/66666666-7777-8888-9999-000000000000"
+ }
+]

@@ -1,0 +1,29 @@
+{
+ "jobPostingInfo": {
+  "id": "7559f51067751000b8c0d15d3a1e0001",
+  "title": "Developer (RBC Amplify 2027) - Toronto",
+  "jobDescription": "<p><b>WHAT IS THE OPPORTUNITY?</b></p><p>RBC Amplify is a Summer 2027 internship for university students. You will build Java and React applications.</p>",
+  "location": "TORONTO, Ontario, Canada",
+  "postedOn": "Posted 3 Days Ago",
+  "startDate": "2026-11-08",
+  "timeType": "Full time",
+  "jobReqId": "R-0000191193",
+  "jobPostingId": "Developer--RBC-Amplify-2027--Toronto_R-0000191193-1",
+  "jobPostingSiteId": "RBCEARLYTALENT1",
+  "country": {
+   "descriptor": "Canada",
+   "id": "x"
+  },
+  "jobRequisitionLocation": {
+   "descriptor": "TORONTO",
+   "country": {
+    "descriptor": "Canada",
+    "alpha2Code": "CA"
+   }
+  },
+  "externalUrl": "https://rbc.wd3.myworkdayjobs.com/RBCEARLYTALENT1/job/TORONTO-Ontario-Canada/Developer--RBC-Amplify-2027--Toronto_R-0000191193-1"
+ },
+ "hiringOrganization": {
+  "name": "Royal Bank of Canada"
+ }
+}

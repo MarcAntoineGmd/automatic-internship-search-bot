@@ -1,0 +1,37 @@
+{
+ "total": 3,
+ "jobPostings": [
+  {
+   "title": "Developer (RBC Amplify 2027) - Toronto",
+   "externalPath": "/job/TORONTO-Ontario-Canada/Developer--RBC-Amplify-2027--Toronto_R-0000191193-1",
+   "timeType": "Full time",
+   "locationsText": "TORONTO, Ontario, Canada",
+   "postedOn": "Posted 3 Days Ago",
+   "bulletFields": [
+    "R-0000191193"
+   ]
+  },
+  {
+   "title": "2028 Capital Markets, Global Markets Sales & Trading Summer Analyst",
+   "externalPath": "/job/New-York-New-York-United-States-of-America/XMLNAME-2028-Capital-Markets--Global-Markets-Sales---Trading-Analyst_R-0000191757-1",
+   "timeType": "Full time",
+   "locationsText": "New York, New York, United States of America",
+   "postedOn": "Posted Yesterday",
+   "bulletFields": [
+    "R-0000191757"
+   ]
+  },
+  {
+   "title": "Senior Director, Technology",
+   "externalPath": "/job/TORONTO-Ontario-Canada/Senior-Director_R-0000100000",
+   "timeType": "Full time",
+   "locationsText": "TORONTO, Ontario, Canada",
+   "postedOn": "Posted 30+ Days Ago",
+   "bulletFields": [
+    "R-0000100000"
+   ]
+  }
+ ],
+ "facets": [],
+ "userAuthenticated": false
+}

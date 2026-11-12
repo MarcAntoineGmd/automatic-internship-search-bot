@@ -1,0 +1,39 @@
+{
+ "8359242": {
+  "content": "&lt;p&gt;&lt;strong&gt;Job Title:&lt;/strong&gt; Co-op/Intern, DevOps (Winter 2027 Term)&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Location&lt;/strong&gt;: Alberta or British Columbia (Remote)&amp;nbsp;&lt;/p&gt;&lt;p&gt;You will build CI/CD pipelines with Kubernetes, Docker, AWS and Python. Students currently enrolled in a post-secondary co-op program.&lt;/p&gt;",
+  "offices": [
+   {
+    "id": 51292,
+    "name": "Alberta",
+    "location": "Alberta, Canada"
+   },
+   {
+    "id": 74162,
+    "name": "British Columbia",
+    "location": "British Columbia, Canada"
+   }
+  ],
+  "departments": [
+   {
+    "id": 37266,
+    "name": "Students"
+   }
+  ]
+ },
+ "8360176": {
+  "content": "&lt;p&gt;As a co-op you will write code in TypeScript and React, design REST APIs and ship features.&lt;/p&gt;",
+  "offices": [
+   {
+    "id": 1,
+    "name": "Toronto",
+    "location": "Toronto, Ontario, Canada"
+   }
+  ],
+  "departments": []
+ },
+ "8000002": {
+  "content": "&lt;p&gt;Help our marketing team with campaigns.&lt;/p&gt;",
+  "offices": [],
+  "departments": []
+ }
+}
