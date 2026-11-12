@@ -74,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     p_scan.add_argument("--sources-file", help="override SOURCES_FILE")
     p_scan.add_argument("--show", type=int, default=40, help="max jobs to print")
     sub.add_parser("sources", help="list configured sources")
+    p_exp = sub.add_parser("export", help="write every stored match to a file")
+    p_exp.add_argument("--format", choices=["html", "csv"], default="html")
+    p_exp.add_argument("--out", help="output file (default: internships.<format>)")
     args = parser.parse_args(argv)
 
     settings = load_settings()
@@ -81,6 +84,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "scan":
         return asyncio.run(_scan_once(args))
+    if args.cmd == "export":
+        from .db import Database
+        from .export import to_csv, to_html
+
+        db = Database(settings.database_path)
+        jobs = db.all_jobs()
+        data = to_html(jobs, settings.timezone) if args.format == "html" else to_csv(jobs, settings.timezone)
+        out = Path(args.out or f"internships.{args.format}")
+        out.write_bytes(data)
+        db.close()
+        print(f"Wrote {len(jobs)} jobs to {out.resolve()}")
+        return 0
     if args.cmd == "sources":
         from .config import load_sources_config
         from .sources import build_sources

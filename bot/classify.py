@@ -113,7 +113,7 @@ EXCLUDE_CATEGORIES: list[tuple[str, re.Pattern]] = [
         r"\b(product manag\w*|program manag\w*|project manag\w*|product owner|chef de produit|"
         r"gestion de projet|scrum master|product (marketing|operations|analyst)|"
         r"(ux|ui|product|graphic|visual|interaction|content|game|level|motion|industrial) design(er)?|"
-        r"designer|design intern|technical writer|r[ée]dact)\b", re.I)),
+        r"designer|design intern|technical writer|r[ée]dact|(ux|user) research\w*)\b", re.I)),
     ("non_engineering", re.compile(
         r"\b(sales|vente|ventes|account (executive|manager)|business development|bdr|sdr|marketing|"
         r"communications?|social media|public relations|brand|recruit\w*|talent acquisition|"
@@ -124,7 +124,7 @@ EXCLUDE_CATEGORIES: list[tuple[str, re.Pattern]] = [
         r"supply chain|logistics|procurement|customer success|customer service|consultant|"
         r"consulting|strategy|strat[ée]gie|administrative|administrator|assistant|coordinator|"
         r"coordonnat\w*|receptionist|event|policy|merchandising|retail|store|warehouse|driver|"
-        r"nurse|clinical|pharmac\w*|teacher|tutor|journalis\w*|editor|copywriter|photograph\w*|"
+        r"nurse|clinical|pharmac\w*|teacher|tutor|journalis\w*|editor|copywriter|photograph\w*|econom\w*|"
         r"video|animator|artist|art|audio|sound|music|qa tester|game tester|localization tester|"
         r"real estate|insurance|claims|banking associate|relationship)\b", re.I)),
 ]
@@ -161,6 +161,9 @@ SIMPLIFY_CATEGORY_HINTS = {
     "product": ("product_design", 0),
     "product management": ("product_design", 0),
 }
+
+# Postings whose role is unclear stay below the default DM threshold (NOTIFY_MIN_SCORE=55).
+UNCLEAR_ROLE_MAX_SCORE = 54
 
 UNPAID_RE = re.compile(
     r"\b(unpaid|non[- ]r[ée]mun[ée]r[ée]e?|b[ée]n[ée]vole|volunteer (position|role|opportunity)|"
@@ -317,6 +320,10 @@ def _role_category(title: str, description: str, category_hint: str | None) -> t
             hcat, hw = hint
             if hw == 0 and not best_cat:
                 return hcat, 0, [f"source category {category_hint}"], True
+            # A tracker's category only counts fully when the title itself shows tech work;
+            # otherwise it can keep the posting (stored, visible in /export) but not trigger a DM.
+            if best_w < 24:
+                hw = min(hw, 16)
             if hw > best_w:
                 best_cat, best_w = hcat, hw
                 reasons.append(f"source category {category_hint}")
@@ -504,6 +511,9 @@ def classify(job: Job, cfg: FilterConfig, now: datetime | None = None) -> Classi
 
     score = role_w + intern_points + loc_points + term_points + student_bonus - penalty
     score = max(0, min(100, score))
+    if role_w < 20 and score > UNCLEAR_ROLE_MAX_SCORE:
+        score = UNCLEAR_ROLE_MAX_SCORE
+        reasons.append("role unclear from title: kept for review, no DM")
     if not excluded and score < cfg.min_score:
         excluded = f"score {score} below minimum {cfg.min_score}"
 

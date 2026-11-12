@@ -1,6 +1,7 @@
 """discord.py client: slash commands, DM delivery, scheduler start-up."""
 from __future__ import annotations
 
+import io
 import logging
 from datetime import datetime
 
@@ -9,6 +10,7 @@ from discord import app_commands
 
 from .app import HELP_TEXT, RadarApp
 from .config import Settings
+from .export import to_csv, to_html
 from .notify import CHANNEL_PREFIX, build_summary_embed
 from .scheduler import DailySummaryScheduler, ScanScheduler
 
@@ -173,13 +175,32 @@ class RadarBot(discord.Client):
                 "\nFailed: " + ", ".join(report.errors) if report.errors else ""), ephemeral=True)
 
         @tree.command(name="latest", description="Show the most recently discovered matching jobs")
-        @app_commands.describe(count="How many jobs (1-25)")
-        async def latest(interaction: discord.Interaction, count: app_commands.Range[int, 1, 25] = 10):
+        @app_commands.describe(count="Jobs per page (1-25)", page="Page number (1 = newest)")
+        async def latest(interaction: discord.Interaction, count: app_commands.Range[int, 1, 25] = 10,
+                         page: app_commands.Range[int, 1, 1000] = 1):
             if await deny_if_not_owner(interaction):
                 return
-            jobs = app.db.latest_jobs(limit=count)
-            embed = build_summary_embed(f"Latest {len(jobs)} discovered job(s)", jobs, limit=count)
+            total = app.db.count_jobs()
+            pages = max(1, -(-total // count))
+            jobs = app.db.latest_jobs(limit=count, offset=(page - 1) * count)
+            embed = build_summary_embed(f"Latest jobs — page {page}/{pages} ({total} stored)", jobs, limit=count,
+                                        footer="Next page: /latest page:<n> · Full list: /export")
             await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        @tree.command(name="export", description="Download every stored match as a file")
+        @app_commands.describe(format="html = clickable table for your browser, csv = Excel / Google Sheets")
+        @app_commands.choices(format=[app_commands.Choice(name="html (browser)", value="html"),
+                                      app_commands.Choice(name="csv (Excel)", value="csv")])
+        async def export(interaction: discord.Interaction, format: app_commands.Choice[str] | None = None):
+            if await deny_if_not_owner(interaction):
+                return
+            fmt = format.value if format else "html"
+            jobs = app.db.all_jobs()
+            data = to_html(jobs, self.settings.timezone) if fmt == "html" else to_csv(jobs, self.settings.timezone)
+            name = f"internships-{datetime.now().strftime('%Y-%m-%d')}.{fmt}"
+            await interaction.response.send_message(
+                f"{len(jobs)} stored matches, best first. Your status column updates with /applied.",
+                file=discord.File(io.BytesIO(data), filename=name), ephemeral=True)
 
         @tree.command(name="test_notification", description="Send a test notification (channel or DM)")
         async def test_notification(interaction: discord.Interaction):

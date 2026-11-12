@@ -223,3 +223,29 @@ def test_terms_from_source_hint():
 def test_unknown_fields_stay_unknown():
     r = c("Software Engineer Intern", "Toronto")
     assert r.term is None and r.workplace is None and r.eligibility is None
+
+
+# ------------------------------------------------------------------ vague titles from trackers
+def _tracker(title, hint):
+    from bot.models import Job
+
+    return classify(Job(source="github_listings:s", source_job_id=title, company="X", title=title, url="u",
+                        location="Toronto, ON, Canada", category_hint=hint, terms_hint=["Summer 2027"],
+                        assume_internship=True), CFG, now=NOW)
+
+
+def test_tracker_category_alone_does_not_trigger_a_dm():
+    for title in ("MScAC Intern", "Safety Methodologies Intern Co-op", "Application Engineering Co-op"):
+        r = _tracker(title, "Software")
+        assert r.included and r.score < 55, (title, r.score)  # stored for /export, no DM
+
+
+def test_clear_titles_from_trackers_still_notify():
+    assert _tracker("Data Science Intern, Algorithms", "AI/ML/Data").score >= 55
+    assert _tracker("Technology Co-op", "Software").score >= 55
+    assert _tracker("Software Engineer Intern", "Software").score >= 80
+
+
+def test_economics_and_ux_research_excluded():
+    assert not _tracker("Economic Co-op - Market & Analysis", "AI/ML/Data").included
+    assert not _tracker("UX Research Intern", "AI/ML/Data").included

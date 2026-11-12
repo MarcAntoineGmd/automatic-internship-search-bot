@@ -327,9 +327,17 @@ class Database:
         r = self._one("SELECT * FROM jobs WHERE id=?", (job_id,))
         return JobRow.from_row(r) if r else None
 
-    def latest_jobs(self, limit: int = 10, min_score: int = 0) -> list[JobRow]:
-        rows = self._exec("SELECT * FROM jobs WHERE score >= ? ORDER BY date_discovered DESC, score DESC, id DESC LIMIT ?",
-                          (min_score, limit)).fetchall()
+    def latest_jobs(self, limit: int = 10, min_score: int = 0, offset: int = 0) -> list[JobRow]:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT * FROM jobs WHERE score >= ? ORDER BY date_discovered DESC, score DESC, id DESC LIMIT ? OFFSET ?",
+                (min_score, limit, offset)).fetchall()
+        return [JobRow.from_row(r) for r in rows]
+
+    def all_jobs(self) -> list[JobRow]:
+        """Every stored match, best first (used by /export)."""
+        with self._lock:
+            rows = self.conn.execute("SELECT * FROM jobs ORDER BY score DESC, date_discovered DESC, id DESC").fetchall()
         return [JobRow.from_row(r) for r in rows]
 
     def jobs_since(self, since: datetime) -> list[JobRow]:

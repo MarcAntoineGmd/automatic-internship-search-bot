@@ -28,6 +28,7 @@ Other commands:
 | `python -m bot scan --temp-db` | Same, with a temporary DB. A pure smoke test that shows ✓/✗ per source |
 | `python -m bot scan --temp-db --only greenhouse,lever` | Only some source types or ids |
 | `python -m bot sources` | List configured sources |
+| `python -m bot export --format html` | Write every stored match to `internships.html` (or `--format csv`) |
 
 ---
 
@@ -59,7 +60,8 @@ Bots can't start a DM with a stranger, so you add the bot to a small server you 
 | `/notify_dm` | owner | Go back to DMs |
 | `/status` | owner | Subscription, jobs stored, DMs sent, pending, active sources, last successful scan, next scan, source errors |
 | `/scan` | owner | Run a scan now. It is refused if one is already running. |
-| `/latest [count]` | owner | Most recently discovered matches |
+| `/latest [count] [page]` | owner | Most recently discovered matches, 25 per page max (`page:2` for the next ones) |
+| `/export [html\|csv]` | owner | Download **every** stored match as a file: `html` opens in your browser (sortable, filterable, clickable links), `csv` opens in Excel / Google Sheets |
 | `/test_notification` | owner | Send a test message wherever notifications go (channel or DM) |
 | `/applied <job_id> [status]` | owner | Track an application: `applied` (default), `interviewing`, `offer`, `rejected`, `ignored`, `new` |
 | `/help` | anyone | Command list |
@@ -118,7 +120,7 @@ Each posting gets a 0–100 score from these parts:
 
 **Always excluded:** senior or experienced roles, full-time roles that aren't internships, new-grad roles (unless `INCLUDE_NEW_GRAD=true`), sales/marketing/HR/finance/legal, IT and technical support, product and design, hardware/analog/ASIC, data and business analyst roles (re-enable with `INCLUDED_CATEGORIES`), unpaid roles (unless `ALLOW_UNPAID=true`), and postings that are only outside Canada (including "Remote – US").
 **Kept with a lower score:** anything uncertain, such as an unknown location, vague titles, or past terms.
-**Not DM'd:** jobs scoring 40–54 are stored and visible in `/latest` and the daily summary, but don't trigger a DM (`NOTIFY_MIN_SCORE=55`).
+**Not DM'd:** jobs scoring 40–54 are stored and visible in `/latest`, `/export` and the daily summary, but don't trigger a DM (`NOTIFY_MIN_SCORE=55`).
 Unknown fields stay unknown. If a source gives no posting date, the DM says *"Posted: Not provided by source"* and only shows the discovery date.
 
 ### Duplicate handling
@@ -127,7 +129,7 @@ Unknown fields stay unknown. If a source gives no posting date, the DM says *"Po
 - Keys are never deleted, so a posting that disappears and comes back is **not** treated as new.
 - Rejected postings are cached so they aren't re-fetched or re-scored. The cache resets automatically when you change filter settings.
 - `notify_status` is saved before the next DM goes out. A failed DM stays pending and is retried on the next scan. There is a cap of `MAX_DMS_PER_SCAN` per scan.
-- **Initial import:** the first time a source is checked successfully, only its best `BASELINE_NOTIFY_LIMIT` (10) matches are DM'd. The others (about 400 on the first run) are stored, summarised in one message and browsable with `/latest`.
+- **Initial import:** the first time a source is checked successfully, only its best `BASELINE_NOTIFY_LIMIT` (10) matches are DM'd. The others (about 400 on the first run) are stored, summarised in one message and browsable with `/latest` or `/export`.
 
 ---
 
@@ -191,4 +193,4 @@ Create `bot/sources/<name>.py` with a `Source` subclass. Set `kind`, implement `
 - Workday's list endpoint only returns relative dates ("Posted 30+ Days Ago"). The exact date is read from the job detail, and older ones stay *unknown*.
 - vanshb03 links are `go.vansh.nyc` short links. The bot resolves them so it can de-duplicate. If that fails, it falls back to company+title matching.
 - Postings with no location at all are kept with a lower score instead of being dropped, so expect the occasional US-only role marked *Location unknown*.
-- The keyword rules are tuned for English and French titles. Very unusual titles with no description can still be missed or mis-scored. Check `/latest` from time to time.
+- The keyword rules are tuned for English and French titles. Very unusual titles with no description can still be missed or mis-scored. Check `/export` from time to time. Postings whose title alone doesn't show a tech role are stored (Low priority) but never DM'd.
