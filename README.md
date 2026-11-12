@@ -60,8 +60,8 @@ Bots can't start a DM with a stranger, so you add the bot to a small server you 
 | `/notify_dm` | owner | Go back to DMs |
 | `/status` | owner | Subscription, jobs stored, DMs sent, pending, active sources, last successful scan, next scan, source errors |
 | `/scan` | owner | Run a scan now. It is refused if one is already running. |
-| `/latest [count] [page]` | owner | Most recently discovered matches, 25 per page max (`page:2` for the next ones) |
-| `/export [html\|csv]` | owner | Download **every** stored match as a file: `html` opens in your browser (sortable, filterable, clickable links), `csv` opens in Excel / Google Sheets |
+| `/latest [count] [page] [province] [session]` | anyone | Most recent matches, 25 per page max. Filter with `province:` 🔵 Québec / 🔴 Ontario / ⚪ ailleurs and `session:` ❄️ hiver / ☀️ été / 🍂 automne |
+| `/export [html\|csv]` | anyone | Download **every** internship found since the start as a file (your application status column is only in *your* copy): `html` opens in your browser (sortable, filterable, clickable links), `csv` opens in Excel / Google Sheets |
 | `/test_notification` | owner | Send a test message wherever notifications go (channel or DM) |
 | `/applied <job_id> [status]` | owner | Track an application: `applied` (default), `interviewing`, `offer`, `rejected`, `ignored`, `new` |
 | `/help` | anyone | Command list |
@@ -71,6 +71,11 @@ Run **`/notify_here`** in the channel you want, for example `#internships`. The 
 From then on every new match is posted in that channel, and DMs stop. **`/notify_dm`** switches back.
 You can also set `NOTIFY_CHANNEL_ID` in `.env` (right-click the channel → **Copy Channel ID**). If you've used `/notify_here` or `/notify_dm`, the command's choice wins over `.env`.
 Jobs already notified are never re-posted when you switch.
+
+### Telling Québec, Ontario and terms apart
+Every post starts with tags, e.g. **🔵 QC · ☀️ Été 2027 | Software Developer Intern**, and the embed colour matches the province: blue for Québec, red for Ontario, green for BC, yellow for Alberta.
+The terms are ❄️ Hiver, ☀️ Été, 🍂 Automne (and 🌱 Printemps), and ❔ when the posting doesn't say.
+The HTML list has the same badges plus filter buttons: *Province* (Québec / Ontario / Ailleurs) and *Session* (Hiver / Été / Automne).
 
 ### Full list of everything found
 After every scan the bot rewrites **`internships.html`** in the project folder. It lists every match found since the first run, best first, with a **NEW** badge on the last 24 h.

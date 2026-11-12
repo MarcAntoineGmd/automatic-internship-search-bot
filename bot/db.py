@@ -327,12 +327,34 @@ class Database:
         r = self._one("SELECT * FROM jobs WHERE id=?", (job_id,))
         return JobRow.from_row(r) if r else None
 
-    def latest_jobs(self, limit: int = 10, min_score: int = 0, offset: int = 0) -> list[JobRow]:
+    @staticmethod
+    def _filters(province: str | None, season: str | None) -> tuple[str, list]:
+        """province: 'QC', 'ON', ... or 'OTHER' (neither QC nor ON); season: 'Winter' | 'Spring' | 'Summer' | 'Fall'."""
+        sql, params = "", []
+        if province == "OTHER":
+            sql += " AND COALESCE(provinces,'') NOT LIKE '%QC%' AND COALESCE(provinces,'') NOT LIKE '%ON%'"
+        elif province:
+            sql += " AND (',' || COALESCE(provinces,'') || ',') LIKE ?"
+            params.append(f"%,{province},%")
+        if season:
+            sql += " AND term LIKE ?"
+            params.append(f"{season} %")
+        return sql, params
+
+    def latest_jobs(self, limit: int = 10, min_score: int = 0, offset: int = 0,
+                    province: str | None = None, season: str | None = None) -> list[JobRow]:
+        extra, params = self._filters(province, season)
         with self._lock:
             rows = self.conn.execute(
-                "SELECT * FROM jobs WHERE score >= ? ORDER BY date_discovered DESC, score DESC, id DESC LIMIT ? OFFSET ?",
-                (min_score, limit, offset)).fetchall()
+                "SELECT * FROM jobs WHERE score >= ?" + extra +
+                " ORDER BY date_discovered DESC, score DESC, id DESC LIMIT ? OFFSET ?",
+                [min_score, *params, limit, offset]).fetchall()
         return [JobRow.from_row(r) for r in rows]
+
+    def count_filtered(self, province: str | None = None, season: str | None = None) -> int:
+        extra, params = self._filters(province, season)
+        with self._lock:
+            return self.conn.execute("SELECT COUNT(*) FROM jobs WHERE 1=1" + extra, params).fetchone()[0]
 
     def all_jobs(self) -> list[JobRow]:
         """Every stored match, best first (used by /export)."""

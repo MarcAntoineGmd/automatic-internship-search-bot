@@ -25,12 +25,13 @@ def test_job_embed_contains_required_fields(db):
     assert isinstance(embed, discord.Embed)
     d = embed.to_dict()
     fields = {f["name"]: f["value"] for f in d["fields"]}
-    assert d["title"] == "Software Developer Intern (Summer 2027)"
+    assert d["title"] == "🔵 QC · ☀️ Été 2027 | Software Developer Intern (Summer 2027)"
+    assert d["color"] == 0x1F6FEB  # Québec = blue
     assert d["url"] == "https://jobs.ashbyhq.com/wealthsimple/abc"
     assert d["author"]["name"] == "Wealthsimple"
     assert fields["Location"] == "Montréal, QC, Canada"
     assert fields["Province"] == "Québec"
-    assert fields["Term"] == "Summer 2027"
+    assert fields["Term"] == "☀️ Été 2027"
     assert fields["Arrangement"] == "Hybrid"
     assert fields["Posted"] == "Not provided by source"  # never claims it was just posted
     assert fields["Discovered"] == "2026-11-11"
@@ -55,7 +56,7 @@ def test_embed_respects_discord_limits(db):
 def test_embed_unknown_values(db):
     row = stored_job(db, location="Remote")
     fields = {f["name"]: f["value"] for f in build_job_embed(row).to_dict()["fields"]}
-    assert fields["Term"] == "Not stated" and fields["Province"] == "Unknown"
+    assert fields["Term"] == "❔ Session non précisée" and fields["Province"] == "Unknown"
 
 
 def test_summary_embed(db):

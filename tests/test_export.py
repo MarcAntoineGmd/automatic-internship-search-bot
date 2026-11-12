@@ -73,3 +73,16 @@ async def test_export_can_be_disabled(settings, db, tmp_path, monkeypatch):
     settings.export_html_path = None
     await Scanner(settings, db, [FakeSource("a", [make_job()])], make_http_dummy(), now=lambda: NOW).run()
     assert not (tmp_path / "internships.html").exists()
+
+
+def test_shared_export_hides_my_application_status(db):
+    job_id = store(db, title="Software Engineer Intern", url="https://e.example/j/9")
+    db.set_application_status(job_id, "interviewing")
+    mine = to_csv(db.all_jobs()).decode("utf-8-sig")
+    shared = to_csv(db.all_jobs(), include_status=False).decode("utf-8-sig")
+    assert "My status" in mine and "interviewing" in mine
+    assert "My status" not in shared and "interviewing" not in shared
+    rows = list(csv.reader(io.StringIO(shared)))
+    assert len(rows[0]) == len(COLUMNS) - 1 and rows[1][-1] == "https://e.example/j/9"
+    page = to_html(db.all_jobs(), include_status=False).decode()
+    assert "interviewing" not in page and "My status" not in page

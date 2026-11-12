@@ -21,8 +21,8 @@ HELP_TEXT = """**Canadian SWE Internship Radar**
 `/notify_dm` — go back to DMs
 `/status` — subscription, counts, last/next scan, source errors
 `/scan` — run a scan now
-`/latest [count] [page]` — most recently discovered matching jobs, page by page
-`/export [html|csv]` — download every stored match as a file
+`/latest [count] [page]` — most recently discovered matching jobs, page by page (anyone)
+`/export [html|csv]` — download every internship found since the start (anyone)
 `/test_notification` — send a test message (to the channel or your DMs)
 `/applied <job_id> [status]` — track your application (applied, interviewing, offer, rejected, ignored, new)
 `/help` — this message"""

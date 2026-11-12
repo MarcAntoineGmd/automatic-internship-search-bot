@@ -175,16 +175,29 @@ class RadarBot(discord.Client):
                 "\nFailed: " + ", ".join(report.errors) if report.errors else ""), ephemeral=True)
 
         @tree.command(name="latest", description="Show the most recently discovered matching jobs")
-        @app_commands.describe(count="Jobs per page (1-25)", page="Page number (1 = newest)")
+        @app_commands.describe(count="Jobs per page (1-25)", page="Page number (1 = newest)",
+                               province="Only Québec, only Ontario, or elsewhere",
+                               session="Only winter, summer or fall internships")
+        @app_commands.choices(
+            province=[app_commands.Choice(name="🔵 Québec (QC)", value="QC"),
+                      app_commands.Choice(name="🔴 Ontario (ON)", value="ON"),
+                      app_commands.Choice(name="⚪ Ailleurs / autres", value="OTHER")],
+            session=[app_commands.Choice(name="❄️ Hiver", value="Winter"),
+                     app_commands.Choice(name="☀️ Été", value="Summer"),
+                     app_commands.Choice(name="🍂 Automne", value="Fall")])
         async def latest(interaction: discord.Interaction, count: app_commands.Range[int, 1, 25] = 10,
-                         page: app_commands.Range[int, 1, 1000] = 1):
-            if await deny_if_not_owner(interaction):
-                return
-            total = app.db.count_jobs()
+                         page: app_commands.Range[int, 1, 1000] = 1,
+                         province: app_commands.Choice[str] | None = None,
+                         session: app_commands.Choice[str] | None = None):
+            prov = province.value if province else None
+            season = session.value if session else None
+            total = app.db.count_filtered(prov, season)
             pages = max(1, -(-total // count))
-            jobs = app.db.latest_jobs(limit=count, offset=(page - 1) * count)
-            embed = build_summary_embed(f"Latest jobs — page {page}/{pages} ({total} stored)", jobs, limit=count,
-                                        footer="Next page: /latest page:<n> · Full list: /export")
+            jobs = app.db.latest_jobs(limit=count, offset=(page - 1) * count, province=prov, season=season)
+            label = " · ".join(c.name for c in (province, session) if c) or "all"
+            embed = build_summary_embed(f"Latest jobs ({label}) — page {page}/{pages}, {total} found", jobs,
+                                        limit=count,
+                                        footer="🔵 QC · 🔴 ON · ❄️ Hiver · ☀️ Été · 🍂 Automne · Full list: /export")
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
         @tree.command(name="export", description="Download every stored match as a file")
@@ -192,14 +205,16 @@ class RadarBot(discord.Client):
         @app_commands.choices(format=[app_commands.Choice(name="html (browser)", value="html"),
                                       app_commands.Choice(name="csv (Excel)", value="csv")])
         async def export(interaction: discord.Interaction, format: app_commands.Choice[str] | None = None):
-            if await deny_if_not_owner(interaction):
-                return
+            # Anyone in the server can download the list; only the owner's copy includes application statuses.
+            mine = app.is_owner(interaction.user.id)
             fmt = format.value if format else "html"
             jobs = app.db.all_jobs()
-            data = to_html(jobs, self.settings.timezone) if fmt == "html" else to_csv(jobs, self.settings.timezone)
+            tz = self.settings.timezone
+            data = to_html(jobs, tz, include_status=mine) if fmt == "html" else to_csv(jobs, tz, include_status=mine)
             name = f"internships-{datetime.now().strftime('%Y-%m-%d')}.{fmt}"
+            note = " Your status column updates with /applied." if mine else ""
             await interaction.response.send_message(
-                f"{len(jobs)} stored matches, best first. Your status column updates with /applied.",
+                f"{len(jobs)} internships found since the start, best first. Open the file in your browser.{note}",
                 file=discord.File(io.BytesIO(data), filename=name), ephemeral=True)
 
         @tree.command(name="test_notification", description="Send a test notification (channel or DM)")

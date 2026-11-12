@@ -11,6 +11,7 @@ import discord
 
 from .config import Settings
 from .db import Database, JobRow
+from .tags import province_color, season_tag, tag_line
 from .textutil import truncate, utcnow
 
 log = logging.getLogger(__name__)
@@ -40,12 +41,13 @@ def _fmt_date(dt: datetime | None, tz: str) -> str | None:
 
 
 def build_job_embed(job: JobRow, tz: str = "America/Toronto") -> discord.Embed:
-    title = truncate(f"{job.title}", 240)
+    tags = tag_line(job.provinces, job.country, job.term, job.workplace)
+    title = truncate(f"{tags} | {job.title}", 250)
     embed = discord.Embed(
         title=title,
         url=job.url or None,
         description=truncate(_short_description(job), 350) or None,
-        color=PRIORITY_COLORS.get(job.priority, 0x95A5A6),
+        color=province_color(job.provinces, job.country),  # blue = QC, red = ON, green = BC, yellow = AB
     )
     embed.set_author(name=truncate(job.company, 200))
     location = job.location or "Unknown"
@@ -53,7 +55,7 @@ def build_job_embed(job: JobRow, tz: str = "America/Toronto") -> discord.Embed:
     prov = ", ".join(PROVINCE_NAMES.get(p, p) for p in job.provinces[:3]) or (
         "Unknown" if job.country != "Canada" else "Canada (province not stated)")
     embed.add_field(name="Province", value=prov, inline=True)
-    embed.add_field(name="Term", value=job.term or "Not stated", inline=True)
+    embed.add_field(name="Term", value=season_tag(job.term), inline=True)
     embed.add_field(name="Arrangement", value=WORKPLACE_LABEL.get(job.workplace or "", "Not stated"), inline=True)
     kind = {"co-op": "Co-op", "internship": "Internship", "student": "Student position",
             "new_grad": "New grad"}.get(job.internship_type or "", "Internship (per source)")
@@ -93,10 +95,9 @@ def build_summary_embed(title: str, jobs: list[JobRow], footer: str | None = Non
         embed.description = "No jobs to show."
     lines = []
     for j in jobs[:limit]:
-        loc = j.province or j.location or "?"
-        term = f" · {j.term}" if j.term else ""
         link = f"[{truncate(j.title, 80)}]({j.url})" if j.url else truncate(j.title, 80)
-        lines.append(f"`{j.id}` {PRIORITY_EMOJI.get(j.priority, '')} **{truncate(j.company, 40)}** — {link} ({loc}{term})")
+        tags = tag_line(j.provinces, j.country, j.term, j.workplace)
+        lines.append(f"`{j.id}` {tags} · **{truncate(j.company, 40)}** — {link}")
     if lines:
         embed.description = truncate("\n".join(lines), 4000)
     if len(jobs) > limit:
