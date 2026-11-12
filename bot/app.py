@@ -120,7 +120,9 @@ class RadarApp:
     def status(self, user_id: int | str, next_scan_at: datetime | None = None) -> dict:
         last_ok = self.db.last_successful_scan()
         last = self.db.last_scan()
-        failing = self.db.failing_sources()
+        active = {src.id for src in self.sources}
+        # Only report sources that are still configured; disabled/removed ones keep old rows in the DB.
+        failing = [s for s in self.db.failing_sources() if s["source"] in active]
         return {
             "subscribed": self.db.is_subscribed(user_id),
         "notify_target": self.notify_target_label(),

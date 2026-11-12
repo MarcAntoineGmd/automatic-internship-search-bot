@@ -188,3 +188,20 @@ def test_channel_id_from_env():
 
     assert load_settings(env={"NOTIFY_CHANNEL_ID": "123456"}).notify_channel_id == 123456
     assert load_settings(env={}).notify_channel_id is None
+
+
+def test_status_hides_errors_from_disabled_sources(settings, db):
+    from datetime import datetime, timezone
+
+    from bot.sources.greenhouse import GreenhouseSource
+
+    now = datetime.now(timezone.utc)
+    db.record_source_check(1, "greenhouse:visiersolutionsinc", False, now, 10, error="HTTP 404")
+    db.record_source_check(1, "greenhouse:lyft", False, now, 10, error="HTTP 500")
+
+    async def send(target, payload):
+        pass
+
+    app = RadarApp(settings, send=send, db=db, sources=[GreenhouseSource(board="lyft")], http=None)
+    app.subscribe(1)
+    assert app.status(1)["failing_sources"] == [("greenhouse:lyft", "HTTP 500")]
