@@ -82,6 +82,13 @@ After every scan the bot rewrites **`internships.html`** in the project folder. 
 Open it once in your browser (e.g. `file:///D:/automatic-internship-search-bot/internships.html`), bookmark it, and refresh it whenever you like.
 The file is git-ignored because it includes your application statuses. Set `EXPORT_HTML_PATH=` (empty) in `.env` to turn it off. `/export` sends the same list in Discord.
 
+**Dead links.** The bot doesn't open the links themselves; it remembers which source listed each posting and when:
+- Every source that lists a posting has its link saved. The *Apply* link is the one a source listed in the latest scans,
+  and the company's own career site beats the trackers. So when a tracker drops a posting (or its old link dies) while the
+  company still lists it, the link switches to the company's page by itself.
+- A posting that **no** source has listed for 12 h is greyed out with **⚠️ Peut-être fermé** and hidden by default
+  (filter *Statut*: Ouverts / Peut-être fermés / Tous).
+
 ### Manual DM verification (real Discord)
 1. Fill in `.env` and run `python -m bot`. The log should show `Logged in as …` and `Synced 8 slash commands to guild …`.
 2. Run `/subscribe` in your server and check that the reply says *Subscribed*.
@@ -96,18 +103,19 @@ The file is git-ignored because it includes your application statuses. Set `EXPO
 
 ## 3. What gets notified
 
-### Sources (109 configured in `sources.toml`)
+### Sources (109 active in `sources.toml`)
 
 | Type | Count | How |
 |---|---|---|
 | Aggregators | 3 | SimplifyJobs *Summer2027-Internships* and vanshb03 *Summer2027-Internships* (`listings.json`), negarprh *Canadian-Tech-Internships-2027* (README table). Fetched with ETag caching, so an unchanged file costs a 304. |
-| Greenhouse | 37 | `boards-api.greenhouse.io/v1/boards/<board>/jobs`: Lyft, Stripe, Pinterest, Databricks, Tower Research (Montréal), Hootsuite, Epic Games (Montréal), Faire, Geotab, Tenstorrent, Robinhood, Toast, Okta, D2L, MongoDB, AppDirect, Workleap, Poka, ShareGate, … |
+| Greenhouse | 36 | `boards-api.greenhouse.io/v1/boards/<board>/jobs`: Lyft, Stripe, Pinterest, Databricks, Tower Research (Montréal), Hootsuite, Epic Games (Montréal), Faire, Geotab, Tenstorrent, Robinhood, Toast, Okta, D2L, MongoDB, AppDirect, Workleap, Poka, ShareGate, … |
 | Lever | 7 | `api.lever.co/v0/postings/<company>`: Waabi, Kepler, PointClickCare, Palantir, Wattpad, Spotify, Behaviour Interactive |
 | Ashby | 29 | `api.ashbyhq.com/posting-api/job-board/<org>`: Wealthsimple, Cohere, 1Password, KOHO, Neo, Jane, Jobber, Benevity, Hopper, Trulioo, Snowflake, TELUS Digital, … |
-| Workday | 30 | the public career-site JSON (`/wday/cxs/<tenant>/<site>/jobs`): RBC (×2), TD, BMO (×2), CIBC, Desjardins, Intact, Autodesk, NVIDIA, Thomson Reuters, Ciena, Manulife, Sun Life, Morgan Stanley, Warner Bros. Games, Cisco, CAE, BlackBerry, Interac, SOTI, Altera, Clio, OMERS, PSP, CDPQ, Canadian Tire, Salesforce, GM, Thales |
+| Workday | 29 | the public career-site JSON (`/wday/cxs/<tenant>/<site>/jobs`): RBC (×2), TD, BMO (×2), CIBC, Desjardins, Intact, NVIDIA, Thomson Reuters, Ciena, Manulife, Sun Life, Morgan Stanley, Warner Bros. Games, Cisco, CAE, BlackBerry, Interac, SOTI, Altera, Clio, OMERS, PSP, CDPQ, Canadian Tire, Salesforce, GM, Thales |
 | SmartRecruiters | 3 | `api.smartrecruiters.com/v1/companies/<id>/postings?country=ca`: Ubisoft, ServiceNow, Intelerad |
+| Eightfold | 2 | the public career-site JSON (`/api/pcsx/search?domain=…&location=Canada`): Autodesk (`jobs.autodesk.com`, which replaced its Workday site; the old Workday req id is kept so tracker links still match), Microsoft (`apply.careers.microsoft.com`) |
 
-**Companies without a supported public ATS API.** These are only covered when one of the aggregators lists them, and the aggregators do list most of them: Shopify, Google, Microsoft, Amazon, AMD, IBM, National Bank (Avature), Nokia (Oracle Cloud), Qualcomm (Eightfold), Kinaxis (iCIMS), SAP, Ericsson, Bell, TELUS (corporate), CGI, Scotiabank, Coveo, Genetec (Workable).
+**Companies without a supported public ATS API.** These are only covered when one of the aggregators lists them, and the aggregators do list most of them: Shopify, Google, Amazon, AMD, IBM, National Bank (Avature), Nokia (Oracle Cloud), Qualcomm (Eightfold), Kinaxis (iCIMS), SAP, Ericsson, Bell, TELUS (corporate), CGI, Scotiabank, Coveo, Genetec (Workable).
 To add one, write an adapter (section 6).
 **Not used: LinkedIn and Indeed.** They have no authorized public API for this, and scraping them would break their terms.
 **CSJobs.ca:** no public feed or API was found.
@@ -135,7 +143,7 @@ Unknown fields stay unknown. If a source gives no posting date, the DM says *"Po
 
 ### Duplicate handling
 - Each job is stored under several keys: its source uid, a canonical ATS key read from the URL (`greenhouse:<id>` — including `?gh_jid=` on company sites —, `lever:<uuid>`, `ashby:<uuid>`, `workday:<tenant>:<req-id>`, `smartrecruiters:<id>`) and the cleaned-up URL. A fallback fingerprint uses company and title, with aliases (RBC = Royal Bank of Canada) and term/city words removed, and must also match on term and province.
-- Direct ATS sources are processed before aggregators, so the stored record is the one with the richer data. Later sightings only update `last_seen` and `also_seen_on`.
+- Direct ATS sources are processed before aggregators, so the stored record is the one with the richer data. Later sightings update `last_seen`, `also_seen_on` and that source's link (see *Dead links* above).
 - Keys are never deleted, so a posting that disappears and comes back is **not** treated as new.
 - Rejected postings are cached so they aren't re-fetched or re-scored. The cache resets automatically when you change filter settings.
 - `notify_status` is saved before the next DM goes out. A failed DM stays pending and is retried on the next scan. There is a cap of `MAX_DMS_PER_SCAN` per scan.
@@ -175,7 +183,7 @@ pytest -m live -rs # read-only smoke tests against real public APIs (skips hosts
 python -m bot scan --temp-db # full live scan of every configured source, with ✓/✗ per source
 ```
 
-The tests cover normalization, Greenhouse/Lever/Ashby/Workday/SmartRecruiters/GitHub/Markdown parsing,
+The tests cover normalization, Greenhouse/Lever/Ashby/Workday/SmartRecruiters/Eightfold/GitHub/Markdown parsing, link switching when a tracker drops a posting,
 internship keywords (English and French), SWE relevance, Québec/Ontario priority, the "CA" (California vs Canada) trap,
 remote eligibility, terms, duplicate detection across sources, persistence across restarts, notification de-duplication,
 failed-DM retries, timeouts and retries (including 429 Retry-After), isolation of failing sources, overlapping-scan prevention,

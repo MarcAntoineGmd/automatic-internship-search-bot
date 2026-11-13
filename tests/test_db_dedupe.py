@@ -113,3 +113,73 @@ def test_application_status(db):
     assert db.get_job(job_id).application_status == "applied"
     assert db.application_counts() == {"applied": 1}
     assert not db.set_application_status(9999, "applied")
+
+
+# ------------------------------------------------------------------ live links
+def _autodesk_jobs():
+    tracker = make_job(source="github_listings:vansh", source_job_id="v1", company="Autodesk",
+                       title="Software Developer Intern", location="Toronto, ON",
+                       url="https://autodesk.wd1.myworkdayjobs.com/Ext/job/Toronto-ON-CAN/Software-Developer-Intern_26WD102151-1",
+                       assume_internship=True)
+    company = make_job(source="eightfold:autodesk", source_job_id="1443154491171", company="Autodesk",
+                       title="Software Developer Intern", location="Toronto, ON, Canada",
+                       url="https://jobs.autodesk.com/careers/job/1443154491171",
+                       extra_keys=["workday:autodesk:26WD102151"])
+    return tracker, company
+
+
+def _store_at(db, job, now):
+    cls = classify(job, FilterConfig(), now=NOW)
+    dup = db.find_duplicate(job, term=cls.term, provinces=cls.provinces)
+    if dup is not None:
+        db.touch(dup, job, now=now)
+        return dup, False
+    return db.insert_job(job, cls, now=now), True
+
+
+def test_company_site_link_replaces_dropped_tracker_link(db):
+    """Tracker posted the old Workday link (now dead); Autodesk's own site still lists the job."""
+    from datetime import timedelta
+    tracker, company = _autodesk_jobs()
+    job_id, new1 = _store_at(db, tracker, NOW - timedelta(hours=6))
+    assert db.get_job(job_id).url.startswith("https://autodesk.wd1.myworkdayjobs.com/")
+    dup_id, new2 = _store_at(db, company, NOW)
+    assert new1 and not new2 and dup_id == job_id  # same posting: no second notification
+    assert db.get_job(job_id).url == "https://jobs.autodesk.com/careers/job/1443154491171"
+    assert {l["source"] for l in db.links_for(job_id)} == {"github_listings:vansh", "eightfold:autodesk"}
+
+
+def test_company_link_preferred_when_both_list_it(db):
+    from datetime import timedelta
+    tracker, company = _autodesk_jobs()
+    job_id, _ = _store_at(db, company, NOW)
+    _store_at(db, tracker, NOW + timedelta(minutes=1))  # tracker seen later in the same scan
+    assert db.get_job(job_id).url == "https://jobs.autodesk.com/careers/job/1443154491171"
+
+
+def test_tracker_link_used_when_company_site_stopped_listing(db):
+    from datetime import timedelta
+    tracker, company = _autodesk_jobs()
+    job_id, _ = _store_at(db, company, NOW)
+    _store_at(db, tracker, NOW + timedelta(hours=5))
+    assert db.get_job(job_id).url.startswith("https://autodesk.wd1.myworkdayjobs.com/")
+
+
+def test_migration_backfills_links_and_new_url_keys(settings):
+    from bot.db import Database
+    tracker, company = _autodesk_jobs()
+    d = Database(settings.database_path)
+    cls = classify(tracker, FilterConfig(), now=NOW)
+    job_id = d.insert_job(tracker, cls, now=NOW)
+    # simulate a database created by the previous version
+    d._exec("DELETE FROM job_links")
+    d._exec("DELETE FROM job_keys WHERE key LIKE 'workday:%'")
+    d.set_meta("schema_version", None)
+    d.close()
+    d = Database(settings.database_path)
+    try:
+        assert d.find_duplicate(company, use_fingerprint=False) == job_id  # matched on workday:autodesk:26WD102151
+        assert [l["source"] for l in d.links_for(job_id)] == ["github_listings:vansh"]
+        assert d.get_meta("schema_version") == "2"
+    finally:
+        d.close()

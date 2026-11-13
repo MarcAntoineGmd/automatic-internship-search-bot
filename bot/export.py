@@ -13,6 +13,9 @@ from .db import JobRow
 from .notify import PROVINCE_NAMES, WORKPLACE_LABEL
 from .tags import PROVINCE_STYLE, SEASON_STYLE, season_of, season_tag
 
+# A posting no source has listed for this long (relative to the latest scan) is probably closed.
+STALE_AFTER = timedelta(hours=12)
+
 COLUMNS = ["ID", "Score", "Priority", "Company", "Title", "Location", "Province", "Term", "Type", "Arrangement",
            "Posted", "Discovered", "My status", "Source", "Apply URL"]
 
@@ -60,13 +63,19 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
     body = []
     recent = now.astimezone(timezone.utc) - timedelta(hours=24)
     new_count = 0
-    counts = {"QC": 0, "ON": 0, "OTHER": 0, "Winter": 0, "Spring": 0, "Summer": 0, "Fall": 0, "NONE": 0}
+    counts = {"QC": 0, "ON": 0, "OTHER": 0, "Winter": 0, "Spring": 0, "Summer": 0, "Fall": 0, "NONE": 0,
+              "open": 0, "stale": 0}
+    seen_times = [j.last_seen for j in jobs if j.last_seen]
+    latest_seen = max(seen_times) if seen_times else None
     for j in jobs:
         cells = _row(j, tz, include_status)
         url = cells.pop()
         is_new = bool(j.date_discovered and j.date_discovered >= recent)
-        new_count += is_new
-        badge = "<span class='badge'>NEW</span> " if is_new else ""
+        stale = bool(latest_seen and j.last_seen and latest_seen - j.last_seen > STALE_AFTER)
+        counts["stale" if stale else "open"] += 1
+        new_count += is_new and not stale
+        badge = ("<span class='closed' title='No source has listed this posting in the last 12 h'>"
+                 "⚠️ Peut-être fermé</span> ") if stale else ("<span class='badge'>NEW</span> " if is_new else "")
         cells[4] = badge + (f"<a href='{html.escape(url, quote=True)}' target='_blank' rel='noopener'>{html.escape(cells[4])}</a>"
                             if url else html.escape(cells[4]))
         # Province + session badges (blue QC, red ON, …) and data attributes for the filter buttons.
@@ -81,14 +90,17 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
             for p in provs[:3]) or html.escape(cells[6] or "—")
         cells[7] = f"<span class='season s-{season}'>{html.escape(season_tag(j.term))}</span>"
         tds = "".join(f"<td>{c}</td>" if i in (4, 6, 7) else f"<td>{html.escape(c)}</td>" for i, c in enumerate(cells))
-        body.append(f"<tr class='{html.escape(j.priority.lower())}' data-prov='{' '.join(prov_keys)}' "
-                    f"data-season='{season}'>{tds}</tr>")
+        body.append(f"<tr class='{html.escape(j.priority.lower())}{' stale' if stale else ''}' "
+                    f"data-prov='{' '.join(prov_keys)}' data-season='{season}' "
+                    f"data-status='{'stale' if stale else 'open'}'>{tds}</tr>")
     def chip(group: str, value: str, label: str, n: int | None = None) -> str:
         count = f" ({n})" if n is not None else ""
-        active = " active" if value == "" else ""
+        active = " active" if value == ("open" if group == "status" else "") else ""
         return (f"<button class='chip{active}' data-group='{group}' data-value='{value}' "
                 f"onclick=\"pick('{group}','{value}',this)\">{html.escape(label)}{count}</button>")
-    chips = ("<div class='chips'><span>Province :</span>" + chip("prov", "", "Toutes")
+    chips = ("<div class='chips'><span>Statut :</span>" + chip("status", "open", "✅ Ouverts", counts["open"])
+             + chip("status", "stale", "⚠️ Peut-être fermés", counts["stale"]) + chip("status", "", "Tous") + "</div>"
+             + "<div class='chips'><span>Province :</span>" + chip("prov", "", "Toutes")
              + chip("prov", "QC", "🔵 Québec", counts["QC"]) + chip("prov", "ON", "🔴 Ontario", counts["ON"])
              + chip("prov", "OTHER", "⚪ Ailleurs", counts["OTHER"]) + "</div>"
              + "<div class='chips'><span>Session :</span>" + chip("season", "", "Toutes")
@@ -108,6 +120,8 @@ td:nth-child(5){{min-width:240px}} td:nth-child(6){{max-width:220px}} td:nth-chi
 tr.high td:nth-child(3){{color:#1a7f37;font-weight:600}} tr.medium td:nth-child(3){{color:#9a6700}}
 tr.low td:nth-child(3){{color:#6e7781}} a{{color:#0969da}}
 .badge{{background:#1a7f37;color:#fff;border-radius:4px;padding:0 5px;font-size:11px;font-weight:600}}
+.closed{{background:#eaeef2;color:#57606a;border-radius:4px;padding:0 5px;font-size:11px;font-weight:600}}
+tr.stale td{{opacity:.6}} tr.stale a{{text-decoration:line-through}}
 .prov,.season{{display:inline-block;border-radius:10px;padding:1px 7px;font-size:12px;white-space:nowrap;margin:0 2px 2px 0;
 background:#eaeef2;color:#1f2328}}
 .p-QC{{background:#ddf4ff;color:#0550ae}} .p-ON{{background:#ffebe9;color:#a40e26}}
@@ -123,21 +137,22 @@ th,td{{border-color:#30363d}} a{{color:#4493f8}} input{{background:#0d1117;color
 .s-Summer{{background:#4b3b00;color:#f8e3a1}} .s-Fall{{background:#5a2a00;color:#ffc680}}}}
 </style></head><body>
 <h1>Canadian SWE Internship Radar — {len(jobs)} stored matches</h1>
-<p>Updated {html.escape(now.strftime('%Y-%m-%d %H:%M'))} · {new_count} new in the last 24 h · Click a column to sort; type to filter.</p>
+<p>Updated {html.escape(now.strftime('%Y-%m-%d %H:%M'))} · {new_count} new in the last 24 h · {counts['stale']} possibly closed (hidden — click “Tous” to see them) · Links point to a site that still lists the posting.</p>
 {chips}
 <input id="q" placeholder="Filter (company, title, city, term…)" oninput="filter()">
 <div class="wrap"><table id="t"><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>
 <script>
-const sel={{prov:'',season:''}};
+const sel={{prov:'',season:'',status:'open'}};
 function pick(g,v,b){{sel[g]=v;for(const c of document.querySelectorAll(`.chip[data-group="${{g}}"]`))c.classList.toggle('active',c===b);filter();}}
 function filter(){{const q=document.getElementById('q').value.toLowerCase();
 for(const r of document.querySelectorAll('#t tbody tr')){{
-const ok=r.textContent.toLowerCase().includes(q)&&(!sel.prov||r.dataset.prov.split(' ').includes(sel.prov))&&(!sel.season||r.dataset.season===sel.season);
+const ok=r.textContent.toLowerCase().includes(q)&&(!sel.prov||r.dataset.prov.split(' ').includes(sel.prov))&&(!sel.season||r.dataset.season===sel.season)&&(!sel.status||r.dataset.status===sel.status);
 r.style.display=ok?'':'none';}}}}
 let dir=1,last=-1;function sortBy(i){{const tb=document.querySelector('#t tbody');const rows=[...tb.rows];
 dir=(i===last)?-dir:(i===1?-1:1);last=i;const num=i<2;
 rows.sort((a,b)=>{{const x=a.cells[i].textContent,y=b.cells[i].textContent;
 return (num?(Number(x)-Number(y)):x.localeCompare(y))*dir;}});rows.forEach(r=>tb.appendChild(r));}}
+filter();
 </script></body></html>"""
     return page.encode("utf-8")
 

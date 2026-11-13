@@ -5,6 +5,7 @@ import logging
 
 from .ashby import AshbySource
 from .base import FetchContext, Source
+from .eightfold import EightfoldSource
 from .github_listings import GitHubListingsSource
 from .greenhouse import GreenhouseSource
 from .lever import LeverSource
@@ -20,6 +21,7 @@ SOURCE_TYPES: dict[str, type[Source]] = {
     "ashby": AshbySource,
     "workday": WorkdaySource,
     "smartrecruiters": SmartRecruitersSource,
+    "eightfold": EightfoldSource,
     "github_listings": GitHubListingsSource,
     "markdown_table": MarkdownTableSource,
 }

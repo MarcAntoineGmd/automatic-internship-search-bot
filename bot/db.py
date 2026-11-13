@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_fp ON jobs(fp_base);
 CREATE INDEX IF NOT EXISTS idx_jobs_url_key ON jobs(url_key);
 CREATE INDEX IF NOT EXISTS idx_jobs_notify ON jobs(notify_status, score);
+CREATE TABLE IF NOT EXISTS job_links (
+    job_id INTEGER NOT NULL REFERENCES jobs(id),
+    source TEXT NOT NULL,
+    url TEXT NOT NULL,
+    first_seen TEXT,
+    last_seen TEXT,
+    PRIMARY KEY (job_id, source)
+);
 CREATE TABLE IF NOT EXISTS job_keys (
     key TEXT PRIMARY KEY,
     job_id INTEGER NOT NULL REFERENCES jobs(id)
@@ -98,6 +106,10 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 """
 
+AGGREGATOR_PREFIXES = ("github_listings:", "markdown_table:")
+LINK_FRESH_WINDOW = timedelta(hours=1)
+SCHEMA_VERSION = "2"
+
 APPLICATION_STATUSES = ("new", "applied", "interviewing", "offer", "rejected", "ignored")
 
 
@@ -125,6 +137,7 @@ class JobRow:
     url: str | None
     date_posted: datetime | None
     date_discovered: datetime
+    last_seen: datetime | None
     eligibility: str | None
     score: int
     priority: str
@@ -143,6 +156,7 @@ class JobRow:
             workplace=r["workplace"], employment_type=r["employment_type"],
             internship_type=r["internship_type"], term=r["term"], url=r["url"],
             date_posted=parse_datetime(r["date_posted"]), date_discovered=parse_datetime(r["date_discovered"]),
+            last_seen=parse_datetime(r["last_seen"]),
             eligibility=r["eligibility"], score=r["score"] or 0, priority=r["priority"] or "Low",
             category=r["category"], reasons=json.loads(r["reasons"] or "[]"),
             also_seen_on=[s for s in (r["also_seen_on"] or "").split(",") if s],
@@ -164,6 +178,23 @@ class Database:
                 self.conn.execute("PRAGMA synchronous=NORMAL")  # WAL-safe; avoids an fsync per write
             self.conn.execute("PRAGMA foreign_keys=ON")
             self.conn.executescript(SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """v2: per-source links + re-derived URL keys (Workday req ids like 26WD102151 were missed before)."""
+        if self.get_meta("schema_version") == SCHEMA_VERSION:
+            return
+        with self.transaction():
+            rows = self.conn.execute("SELECT id, source, url, date_discovered, last_seen FROM jobs").fetchall()
+            for r in rows:
+                if r["url"]:
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO job_links(job_id, source, url, first_seen, last_seen) VALUES(?,?,?,?,?)",
+                        (r["id"], r["source"], r["url"], r["date_discovered"], r["last_seen"] or r["date_discovered"]))
+                    key = canonical_url_key(r["url"])
+                    if key and not self._is_generic_url_key(key):
+                        self.conn.execute("INSERT OR IGNORE INTO job_keys(key, job_id) VALUES(?, ?)", (key, r["id"]))
+            self.set_meta("schema_version", SCHEMA_VERSION)
 
     def close(self) -> None:
         with self._lock:
@@ -272,6 +303,37 @@ class Database:
             seen.append(job.source)
         self._exec("UPDATE jobs SET last_seen=?, also_seen_on=? WHERE id=?", (_iso(now), ",".join(seen), job_id))
         self.link_keys(job_id, job)
+        self._record_link(job_id, job, now)
+        self._refresh_best_url(job_id)
+
+    def _record_link(self, job_id: int, job: Job, now: datetime) -> None:
+        if not job.url:
+            return
+        self._exec("""INSERT INTO job_links(job_id, source, url, first_seen, last_seen) VALUES(?,?,?,?,?)
+                      ON CONFLICT(job_id, source) DO UPDATE SET url=excluded.url, last_seen=excluded.last_seen""",
+                   (job_id, job.source, job.url, _iso(now), _iso(now)))
+
+    def _refresh_best_url(self, job_id: int) -> None:
+        """Show the link that a source still lists; prefer the company's own site over trackers.
+
+        When a tracker drops a posting (or its link dies) but the company's career site still
+        lists it, the stored URL switches to the company's link automatically."""
+        with self._lock:
+            links = self.conn.execute("SELECT source, url, last_seen FROM job_links WHERE job_id=?", (job_id,)).fetchall()
+        if not links:
+            return
+        newest = max(parse_datetime(l["last_seen"]) or datetime.min.replace(tzinfo=timezone.utc) for l in links)
+        fresh = [l for l in links
+                 if (parse_datetime(l["last_seen"]) or newest) >= newest - LINK_FRESH_WINDOW]
+        best = sorted(fresh, key=lambda l: (l["source"].startswith(AGGREGATOR_PREFIXES),
+                                            -(parse_datetime(l["last_seen"]) or newest).timestamp()))[0]
+        self._exec("UPDATE jobs SET url=? WHERE id=? AND COALESCE(url,'') != ?", (best["url"], job_id, best["url"]))
+
+    def links_for(self, job_id: int) -> list[dict]:
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                "SELECT source, url, first_seen, last_seen FROM job_links WHERE job_id=? ORDER BY last_seen DESC",
+                (job_id,)).fetchall()]
 
     def insert_job(self, job: Job, cls: Classification, now: datetime | None = None,
                    notify_status: str | None = None) -> int:
@@ -291,6 +353,7 @@ class Database:
             )
             job_id = cur.lastrowid
             self.link_keys(job_id, job)
+            self._record_link(job_id, job, now)
             return job_id
 
     def add_rejected(self, uid: str, reason: str | None, now: datetime | None = None) -> None:

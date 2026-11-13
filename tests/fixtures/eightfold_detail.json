@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "data": {
+    "id": 1443154491171,
+    "name": "Software Developer Intern",
+    "locations": ["Toronto, ON, Canada"],
+    "atsJobId": "26WD102151",
+    "workLocationOption": "hybrid",
+    "publicUrl": "https://jobs.autodesk.com/careers/job/1443154491171",
+    "positionUrl": "/careers/job/1443154491171",
+    "jobDescription": "<p>Join Autodesk as a <b>Software Developer Intern</b> for Summer 2027. You will build features in C++ and Python.</p>"
+  }
+}

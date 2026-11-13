@@ -100,7 +100,9 @@ def canonical_url_key(url: str | None) -> str | None:
     if "myworkdayjobs.com" in host or "myworkdaysite.com" in host:
         tenant = host.split(".")[0]
         last = path.split("/")[-1] if path else ""
-        m = re.search(r"_([A-Za-z]*-?\d+)(?:-\d+)?$", last)
+        # requisition id after the last "_", minus Workday's "-1"/"-2" repost suffix:
+        # _R-0000187401-2 -> R-0000187401, _26WD102151-3 -> 26WD102151, _JR100445 -> JR100445
+        m = re.search(r"_([A-Za-z0-9-]*?\d[A-Za-z0-9-]*?)(?:-\d{1,2})?$", last)
         if m:
             return f"workday:{tenant}:{m.group(1).upper()}"
     if "smartrecruiters.com" in host:

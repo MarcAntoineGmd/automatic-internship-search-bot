@@ -1,4 +1,4 @@
-"""Source adapters: Greenhouse, Lever, Ashby, Workday, SmartRecruiters, GitHub listings, Markdown."""
+"""Source adapters: Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Eightfold, GitHub listings, Markdown."""
 from __future__ import annotations
 
 import httpx
@@ -9,6 +9,7 @@ from bot.http import SourceFetchError
 from bot.sources import build_sources
 from bot.sources.ashby import AshbySource
 from bot.sources.base import FetchContext
+from bot.sources.eightfold import EightfoldSource
 from bot.sources.github_listings import GitHubListingsSource
 from bot.sources.greenhouse import GreenhouseSource
 from bot.sources.lever import LeverSource
@@ -146,6 +147,54 @@ def test_workday_url_key_matches_aggregator_url():
     assert a == b == "workday:rbc:R-0000187401"
 
 
+def test_workday_url_key_for_newer_requisition_formats():
+    # Autodesk's ids (26WD102151) have no "R-" prefix and were missed before.
+    assert canonical_url_key("https://autodesk.wd1.myworkdayjobs.com/Ext/job/Toronto-ON-CAN/"
+                             "Software-Developer-Intern_26WD102151-1") == "workday:autodesk:26WD102151"
+    assert canonical_url_key("https://autodesk.wd1.myworkdayjobs.com/en-US/uni/job/Montreal/"
+                             "Intern_26WD102151") == "workday:autodesk:26WD102151"
+    assert canonical_url_key("https://arlo.wd1.myworkdayjobs.com/Arlo/job/Ottawa/Intern_JR100445") == "workday:arlo:JR100445"
+    assert canonical_url_key("https://semtech.wd1.myworkdayjobs.com/x/job/y/Intern_REQ3617-2") == "workday:semtech:REQ3617"
+    # A title slug with no requisition id is not mistaken for one.
+    assert canonical_url_key("https://x.wd3.myworkdayjobs.com/s/job/Toronto/Software-Intern").startswith("url:")
+
+
+# ------------------------------------------------------------------ Eightfold
+async def test_eightfold_parsing(router):
+    router.add("GET", r"jobs\.autodesk\.com/api/pcsx/search", load_fixture("eightfold_search.json"))
+    router.add("GET", r"jobs\.autodesk\.com/api/pcsx/position_details", load_fixture("eightfold_detail.json"))
+    src = EightfoldSource(name="autodesk", company="Autodesk", host="jobs.autodesk.com", domain="autodesk.com",
+                          queries=["intern"], ats_key_prefix="workday:autodesk")
+    jobs = await src.fetch(make_http(router), FetchContext())
+    titles = [j.title for j in jobs]
+    assert "Principal Software Architect" not in titles  # pre-filtered, no detail request
+    dev = next(j for j in jobs if j.title == "Software Developer Intern")
+    assert dev.url == "https://jobs.autodesk.com/careers/job/1443154491171"
+    assert dev.source == "eightfold:autodesk" and dev.source_job_id == "1443154491171"
+    assert dev.extra_keys == ["workday:autodesk:26WD102151"]
+    assert dev.location == "Toronto, ON, Canada" and dev.workplace == "hybrid"
+    assert "C++ and Python" in dev.description and "<b>" not in dev.description
+    assert dev.date_posted.isoformat().startswith("2025-11-12")
+    search = [r for r in router.calls if "/search" in str(r.url)]
+    assert search and search[0].url.params["location"] == "Canada" and search[0].url.params["domain"] == "autodesk.com"
+
+
+async def test_eightfold_skips_details_for_known_jobs(router):
+    router.add("GET", r"/api/pcsx/search", load_fixture("eightfold_search.json"))
+    router.add("GET", r"/api/pcsx/position_details", load_fixture("eightfold_detail.json"))
+    src = EightfoldSource(name="autodesk", company="Autodesk", host="jobs.autodesk.com", domain="autodesk.com")
+    jobs = await src.fetch(make_http(router), FetchContext(is_known=lambda uid: True))
+    assert len(jobs) == 2 and not any("position_details" in str(r.url) for r in router.calls)
+    assert jobs[0].url.startswith("https://jobs.autodesk.com/careers/job/")
+
+
+async def test_eightfold_unexpected_payload(router):
+    router.add("GET", r"/api/pcsx/search", {"status": 403, "message": "nope"})
+    src = EightfoldSource(company="X", host="careers.x.example", domain="x.example")
+    with pytest.raises(SourceFetchError):
+        await src.fetch(make_http(router), FetchContext())
+
+
 # ------------------------------------------------------------------ SmartRecruiters
 async def test_smartrecruiters_parsing(router):
     router.add("GET", r"companies/Ubisoft2/postings/\d+", load_fixture("smartrecruiters_detail.json"))
@@ -233,7 +282,8 @@ def test_shipped_sources_file_is_valid():
     sources, errors = build_sources(load_sources_config("sources.toml"))
     assert errors == []
     kinds = {s.kind for s in sources}
-    assert {"greenhouse", "lever", "ashby", "workday", "smartrecruiters", "github_listings", "markdown_table"} <= kinds
+    assert {"greenhouse", "lever", "ashby", "workday", "smartrecruiters", "eightfold", "github_listings",
+            "markdown_table"} <= kinds
     assert len(sources) >= 50
 
 

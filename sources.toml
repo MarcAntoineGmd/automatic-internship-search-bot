@@ -322,10 +322,11 @@ host = "intactfc.wd3.myworkdayjobs.com"
 site = "intactfc"
 search = ["intern", "co-op", "stage"]
 [[workday]]
-company = "Autodesk"               # (simplify)
+company = "Autodesk"               # moved to jobs.autodesk.com (see [[eightfold]]); site was empty on 2026-11-12
 host = "autodesk.wd1.myworkdayjobs.com"
 site = "uni"
 search = [""]
+enabled = false
 [[workday]]
 company = "NVIDIA"                 # (simplify)
 host = "nvidia.wd5.myworkdayjobs.com"
@@ -446,3 +447,19 @@ country = "ca"
 company_id = "Intelerad"       # (simplify) Montréal
 company = "Intelerad"
 country = "ca"
+
+# ============================================================================ Eightfold
+# Public JSON behind some companies' own career sites: https://<host>/api/pcsx/search
+[[eightfold]]
+name = "autodesk"                  # (live) jobs.autodesk.com — Montréal / Toronto
+company = "Autodesk"
+host = "jobs.autodesk.com"
+domain = "autodesk.com"
+queries = ["intern", "stagiaire", "co-op"]
+ats_key_prefix = "workday:autodesk" # old Workday requisition ids, so tracker links match the live posting
+[[eightfold]]
+name = "microsoft"                 # (live) apply.careers.microsoft.com — Montréal / Vancouver
+company = "Microsoft"
+host = "apply.careers.microsoft.com"
+domain = "microsoft.com"
+queries = ["intern"]

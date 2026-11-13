@@ -1,0 +1,38 @@
+{
+  "status": 200,
+  "data": {
+    "count": 3,
+    "positions": [
+      {
+        "id": 1443154491171,
+        "displayJobId": "26WD102151",
+        "name": "Software Developer Intern",
+        "locations": ["Toronto, ON, Canada"],
+        "standardizedLocations": ["Toronto, ON, CA"],
+        "postedTs": 1762905600,
+        "department": "Engineering",
+        "workLocationOption": "hybrid",
+        "atsJobId": "26WD102151",
+        "positionUrl": "/careers/job/1443154491171"
+      },
+      {
+        "id": 1443154491999,
+        "displayJobId": "26WD100001",
+        "name": "Stagiaire en développement logiciel (Été 2027)",
+        "locations": ["Montréal, QC, Canada"],
+        "postedTs": 1762819200,
+        "workLocationOption": "onsite",
+        "atsJobId": "26WD100001",
+        "positionUrl": "/careers/job/1443154491999"
+      },
+      {
+        "id": 1443154400000,
+        "name": "Principal Software Architect",
+        "locations": ["Toronto, ON, Canada"],
+        "postedTs": 1762819200,
+        "atsJobId": "26WD099999",
+        "positionUrl": "/careers/job/1443154400000"
+      }
+    ]
+  }
+}

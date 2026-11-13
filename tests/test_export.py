@@ -86,3 +86,16 @@ def test_shared_export_hides_my_application_status(db):
     assert len(rows[0]) == len(COLUMNS) - 1 and rows[1][-1] == "https://e.example/j/9"
     page = to_html(db.all_jobs(), include_status=False).decode()
     assert "interviewing" not in page and "My status" not in page
+
+
+def test_html_flags_postings_no_source_lists_anymore(db):
+    from datetime import timedelta
+    job = make_job(source_job_id="old", title="Software Engineer Intern Old", url="https://e.example/j/old")
+    db.insert_job(job, classify(job, FilterConfig(), now=NOW), now=NOW - timedelta(hours=13))
+    store(db, source_job_id="live", title="Software Engineer Intern Live", url="https://e.example/j/live")
+    page = to_html(db.all_jobs(), now=NOW).decode()
+    old_row = next(r for r in page.split("<tr") if "j/old" in r)
+    live_row = next(r for r in page.split("<tr") if "j/live" in r)
+    assert "data-status='stale'" in old_row and "Peut-être fermé" in old_row
+    assert "data-status='open'" in live_row and "Peut-être fermé" not in live_row
+    assert "Ouverts (1)" in page and "Peut-être fermés (1)" in page
