@@ -129,7 +129,7 @@ Each posting gets a 0–100 score from these parts:
 
 | Part | Points |
 |---|---|
-| Role from the title | Software/backend/frontend/full-stack/mobile/game programmer 45. Platform/infra/cloud/DevOps/SRE/embedded, ML/AI engineer, data engineer, security engineer 40. QA automation and quant dev 32. Data science/ML 28. Research 24. Vague "Engineering intern" 8. |
+| Role from the title | Software/backend/frontend/full-stack/mobile/game programmer 45. Platform/infra/cloud/DevOps/SRE, embedded/firmware (incl. *systèmes embarqués*, *micrologiciel*), kernel/OS/drivers/compilers, ML/AI engineer, data engineer, security engineer 40. QA automation and quant dev 32. Data science/ML 28. Research 24. Vague "Engineering intern" 8. |
 | Description fallback | An unusual title still scores 24–30 when the description clearly describes software work (≥4 signals such as Python, React, REST APIs, Git, Docker). |
 | Internship evidence | In the title (intern, co-op, stage/stagiaire, student, PEY) 20. Employment type 18. Listed by an internship tracker 15. Description only 10. |
 | Location | QC/ON 20, plus 3 for Montréal, Québec City, Toronto, Waterloo or Ottawa. Remote in Canada 15. Other provinces 12. Remote North America or worldwide 6. Unknown −12, but the posting is kept. |

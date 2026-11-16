@@ -73,6 +73,7 @@ def settings(tmp_path) -> Settings:
     s = Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}")
     s.max_dms_per_scan = 50
     s.baseline_notify_limit = 100
+    s.pending_max_age_days = 3650  # jobs are stored at a fixed NOW; keep tests independent of today's date
     return s
 
 

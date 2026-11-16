@@ -135,6 +135,7 @@ class Notifier:
             min_score=self.settings.notify_min_score,
             max_age_days=self.settings.pending_max_age_days,
             limit=self.settings.max_dms_per_scan,
+            now=getattr(report, "started_at", None),  # the scan's clock (tests run it at a fixed time)
         )
         sent = 0
         if report is not None and getattr(report, "baseline_job_ids", None):

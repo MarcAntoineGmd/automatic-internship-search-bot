@@ -249,3 +249,22 @@ def test_clear_titles_from_trackers_still_notify():
 def test_economics_and_ux_research_excluded():
     assert not _tracker("Economic Co-op - Market & Analysis", "AI/ML/Data").included
     assert not _tracker("UX Research Intern", "AI/ML/Data").included
+
+
+@pytest.mark.parametrize("title", [
+    "Embedded Software Developer Intern", "Firmware Engineering Intern (Summer 2027)", "Embedded Systems Intern",
+    "Stagiaire en systèmes embarqués", "Systèmes embarqués - Stagiaire", "Stagiaire en micrologiciel",
+    "Stage - Logiciel embarqué (Été 2027)", "Linux Kernel Intern", "Compiler Engineering Intern", "GPU Driver Intern",
+    "Operating Systems Intern", "Real-Time Systems Intern", "Performance Engineering Intern", "FPGA Firmware Intern",
+])
+def test_embedded_and_low_level_roles_are_notified(title):
+    c = classify(make_job(title=title, url="https://e.example/x", location="Montréal, QC"), FilterConfig(), now=NOW)
+    assert c.included and c.score >= 55, (title, c.score, c.exclusion_reason)
+
+
+@pytest.mark.parametrize("title", [
+    "Embedded Hardware Intern", "FPGA Engineering Intern", "ASIC Design Verification Intern",
+    "Electrical Engineering Intern", "Hardware Validation Intern", "Delivery Driver",
+])
+def test_hardware_design_roles_stay_out(title):
+    assert not classify(make_job(title=title, url="https://e.example/x"), FilterConfig(), now=NOW).included

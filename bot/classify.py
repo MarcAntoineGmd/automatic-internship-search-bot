@@ -69,7 +69,11 @@ STRONG_CATEGORIES: list[tuple[str, int, re.Pattern]] = [
         r"dev ops|devsecops|site reliability|sre|systems? software|embedded|firmware|kernel|"
         r"compiler|distributed systems|reliability engineer|network software|robotics software|"
         r"graphics (programmer|engineer)|rendering engineer|production engineer|build engineer|"
-        r"release engineer|tools engineer|systems engineer(ing)? intern)\b", re.I)),
+        r"release engineer|tools engineer|systems engineer(ing)? intern|"
+        # low-level / embedded, incl. French titles ("Stagiaire en systèmes embarqués", "micrologiciel")
+        r"embarqu[ée]e?s?|micrologiciels?|operating systems?|real[- ]time (systems?|software)|rtos|"
+        r"bare[- ]metal|low[- ]level|(gpu|device|graphics|kernel|linux) drivers?|drivers? (developer|engineer|software)|"
+        r"performance engineer(ing)?|high[- ]performance computing|hpc)\b", re.I)),
     ("ai_ml", 40, re.compile(
         r"\b((machine learning|ml|ai|artificial intelligence|deep learning|computer vision|nlp|llm|"
         r"genai|generative ai|mlops) (engineer|engineering|developer|software)|mlops|"
@@ -282,7 +286,7 @@ class FilterConfig:
             ",".join(self.target_provinces), ",".join(self.target_cities), ",".join(self.target_terms),
             ",".join(sorted(self.included_categories)), ",".join(sorted(self.excluded_keywords)),
             str(self.include_new_grad), str(self.allow_unpaid), str(self.include_unknown_location),
-            str(self.min_score), "v1",
+            str(self.min_score), "v2",  # bump when the rules change so rejected postings are re-checked
         ])
 
 
