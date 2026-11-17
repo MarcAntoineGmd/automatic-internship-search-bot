@@ -52,8 +52,11 @@ class RadarApp:
             max_retries=settings.http_max_retries,
         )
         self.notifier = Notifier(self.db, settings, send) if send else None
+        from .verify import LinkChecker
+
         self.scanner = Scanner(settings, self.db, self.sources, self.http,
-                               notify=self.notifier.deliver_pending if self.notifier else None)
+                               notify=self.notifier.deliver_pending if self.notifier else None,
+                               link_checker=LinkChecker(self.db, self.http, settings.link_checks_per_scan))
         self.scheduler = None  # set by the Discord layer
 
     async def aclose(self) -> None:

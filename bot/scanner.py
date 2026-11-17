@@ -53,12 +53,18 @@ class ScanReport:
     def new_jobs(self) -> int:
         return len(self.new_job_ids)
 
+    link_check: dict = field(default_factory=dict)
+
     def summary(self) -> str:
         if self.skipped:
             return "Scan skipped: another scan is already running."
         text = (f"Sources OK {self.sources_ok}, failed {self.sources_failed} | fetched {self.jobs_fetched} | "
                 f"qualifying new {self.new_jobs} (initial import {len(self.baseline_job_ids)}) | "
                 f"duplicates {self.duplicates} | DMs sent {self.notifications_sent}")
+        if self.link_check.get("checked"):
+            lc = self.link_check
+            text += (f" | links checked {lc['checked']}: {lc['open'] + lc['moved']} still open, "
+                     f"{lc['closed']} closed")
         return text
 
 
@@ -67,8 +73,10 @@ NotifyFn = Callable[[ScanReport], Awaitable[int]]
 
 class Scanner:
     def __init__(self, settings: Settings, db: Database, sources: list[Source], http: HttpClient,
-                 notify: NotifyFn | None = None, now: Callable[[], datetime] = utcnow) -> None:
+                 notify: NotifyFn | None = None, now: Callable[[], datetime] = utcnow,
+                 link_checker=None) -> None:
         self.settings = settings
+        self.link_checker = link_checker
         self.db = db
         self.sources = sources
         self.http = http
@@ -167,6 +175,13 @@ class Scanner:
                     self.db.mark_notified(job_id, status="baseline", now=now)
                     report.baseline_job_ids.append(job_id)
 
+        # Postings no source lists anymore: look them up on the company's own job board.
+        if self.link_checker is not None:
+            try:
+                report.link_check = await self.link_checker.run(self.now(), active_sources=self.source_ids())
+            except Exception:
+                log.exception("Link check failed")
+
         report.finished_at = self.now()
         self.db.finish_scan(report.scan_id, sources_ok=report.sources_ok, sources_failed=report.sources_failed,
                             jobs_fetched=report.jobs_fetched, jobs_qualified=report.qualified,
@@ -183,8 +198,10 @@ class Scanner:
                 from .export import write_html_export
 
                 jobs, stale = self.db.all_jobs(), self.db.stale_job_ids(self.now(), active_sources=self.source_ids())
+                closed = stale & self.db.verified_closed_ids()
                 # rendering ~500 rows takes ~0.15 s: do it off the event loop so Discord commands stay instant
-                await asyncio.to_thread(write_html_export, jobs, s.export_html_path, s.timezone, self.now(), stale)
+                await asyncio.to_thread(write_html_export, jobs, s.export_html_path, s.timezone, self.now(), stale,
+                                        closed)
             except Exception:
                 log.exception("Could not write %s", s.export_html_path)
         log.info("Scan %s (%s): %s", report.scan_id, trigger, report.summary())

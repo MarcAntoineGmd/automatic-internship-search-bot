@@ -70,10 +70,13 @@ def _term_order(key: str) -> tuple:
 
 
 def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | None = None,
-            include_status: bool = True, stale_ids: set[int] | None = None) -> bytes:
-    """stale_ids: postings no source lists anymore (Database.stale_job_ids); shown greyed out, hidden by default."""
+            include_status: bool = True, stale_ids: set[int] | None = None,
+            closed_ids: set[int] | None = None) -> bytes:
+    """stale_ids: postings no source lists anymore (Database.stale_job_ids); closed_ids: those also confirmed gone
+    from the company's own job board (bot/verify.py). Both are greyed out and hidden by default."""
     now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(tz))
     stale_ids = stale_ids or set()
+    closed_ids = (closed_ids or set()) & stale_ids
     head = "".join(f"<th onclick='sortBy({i})'>{html.escape(c)}</th>" for i, c in enumerate(_columns(include_status)[:-1]))
     body = []
     recent = now.astimezone(timezone.utc) - timedelta(hours=24)
@@ -90,11 +93,17 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
         url = cells.pop()
         is_new = bool(j.date_discovered and j.date_discovered >= recent)
         stale = j.id in stale_ids
-        status = "stale" if stale else "open"
+        status = "closed" if j.id in closed_ids else ("stale" if stale else "open")
         bump("status", status)
         new_count += is_new and not stale
-        badge = ("<span class='closed' title='No source has listed this posting for 12 h or more'>"
-                 "⚠️ Peut-être fermé</span> ") if stale else ("<span class='badge'>NEW</span> " if is_new else "")
+        if status == "closed":
+            badge = ("<span class='closed' title=\"Looked up on the company's job board: the posting is gone\">"
+                     "❌ Fermé</span> ")
+        elif stale:
+            badge = ("<span class='closed' title='No source has listed this posting for 12 h or more, and the company "
+                     "site could not confirm it'>⚠️ Peut-être fermé</span> ")
+        else:
+            badge = "<span class='badge'>NEW</span> " if is_new else ""
         cells[4] = badge + (f"<a href='{html.escape(url, quote=True)}' target='_blank' rel='noopener'>{html.escape(cells[4])}</a>"
                             if url else html.escape(cells[4]))
         cells[5] = " ".join(f"<span class='sector'>{html.escape(sector_label(k))}</span>" for k in sectors)
@@ -129,7 +138,8 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
 
     terms = sorted(counts["term"], key=_term_order)
     chips = (
-        row("status", "Statut", "Tous", [("open", "✅ Ouverts"), ("stale", "⚠️ Peut-être fermés")])
+        row("status", "Statut", "Tous", [("open", "✅ Ouverts"), ("stale", "⚠️ Peut-être fermés"),
+                                          ("closed", "❌ Fermés (vérifiés)")])
         + row("prov", "Province", "Toutes", [("QC", "🔵 Québec"), ("ON", "🔴 Ontario"), ("OTHER", "⚪ Ailleurs")])
         + row("term", "Session", "Toutes", [(t, term_labels[t]) for t in terms])
         + row("sector", "Secteur", "Tous", [(k, sector_label(k)) for k in SECTORS if counts["sector"].get(k)])
@@ -169,7 +179,7 @@ th,td{{border-color:#30363d}} a{{color:#4493f8}} input{{background:#0d1117;color
 .s-Summer{{background:#4b3b00;color:#f8e3a1}} .s-Fall{{background:#5a2a00;color:#ffc680}}}}
 </style></head><body>
 <h1>Canadian SWE Internship Radar — {len(jobs)} stored matches</h1>
-<p>Updated {html.escape(now.strftime('%Y-%m-%d %H:%M'))} · {new_count} new in the last 24 h · {counts['status'].get('stale', 0)} possibly closed (hidden by default) · Click several buttons in a row to combine them (e.g. Hiver 2027 + Été 2027); click again to remove one.</p>
+<p>Updated {html.escape(now.strftime('%Y-%m-%d %H:%M'))} · {new_count} new in the last 24 h · {counts['status'].get('stale', 0) + counts['status'].get('closed', 0)} closed or possibly closed (hidden by default) · Click several buttons in a row to combine them (e.g. Hiver 2027 + Été 2027); click again to remove one.</p>
 {chips}
 <div class="bar"><input id="q" placeholder="Filter (company, title, city, term…)" oninput="apply()">
 <button class="reset" onclick="reset()">Réinitialiser les filtres</button><span id="shown"></span></div>
@@ -201,12 +211,13 @@ load();apply();
 
 
 def write_html_export(jobs: list[JobRow], path: str | Path, tz: str = "America/Toronto",
-                      now: datetime | None = None, stale_ids: set[int] | None = None) -> Path:
+                      now: datetime | None = None, stale_ids: set[int] | None = None,
+                      closed_ids: set[int] | None = None) -> Path:
     """Write the HTML list atomically, so a browser refresh never sees a half-written file."""
     target = Path(path)
     if target.parent and not target.parent.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(target.name + ".tmp")
-    tmp.write_bytes(to_html(jobs, tz, now, stale_ids=stale_ids))
+    tmp.write_bytes(to_html(jobs, tz, now, stale_ids=stale_ids, closed_ids=closed_ids))
     os.replace(tmp, target)
     return target

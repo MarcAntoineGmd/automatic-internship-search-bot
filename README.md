@@ -95,6 +95,14 @@ The file is git-ignored because it includes your application statuses. Set `EXPO
 - A posting is greyed out with **⚠️ Peut-être fermé** (and hidden by default, filter *Statut*) when every source that listed it
   was checked successfully afterwards and no longer lists it, and nobody has listed it for 12 h. A source that is failing
   (e.g. rate-limited) never makes its postings look closed.
+- **Checked on the company's own job board.** Each scan, up to `LINK_CHECKS_PER_SCAN` (30) of those postings are looked up
+  on the board their link points to (Greenhouse, Lever, Ashby, Workday, SmartRecruiters; tracker short links such as
+  `go.vansh.nyc` are followed first):
+  - still listed → the posting stays open and its link becomes the company's page (re-checked every 24 h);
+  - gone, but the same role was re-posted there (same title, compatible province and term) → the link switches to the new posting;
+  - gone → **❌ Fermé** (filter *Statut → Fermés (vérifiés)*), checked again after 3 days;
+  - other sites (iCIMS, custom pages) only count as closed on a clear 404; otherwise they stay *Peut-être fermé*.
+    A rate limit or server error is retried on the next scan.
 
 ### Manual DM verification (real Discord)
 1. Fill in `.env` and run `python -m bot`. The log should show `Logged in as …` and `Synced 8 slash commands to guild …`.
@@ -177,6 +185,7 @@ All settings are listed in `.env.example`. The main ones:
 | `SOURCES_FILE` | sources.toml | Source list |
 | `EXPORT_HTML_PATH` | internships.html | Growing list of every match, rewritten after each scan (empty = off) |
 | `LOG_FILE` | bot.log | Log file next to the bot (rotates at 1 MB, keeps 3). The only place errors show up in background mode. Empty = off |
+| `LINK_CHECKS_PER_SCAN` | 30 | Possibly-closed postings looked up on the company's job board per scan (0 = off) |
 | `SOURCE_TIMEOUT_SECONDS` | 600 | A source that takes longer is cancelled, so one stuck site can never stall the scans |
 
 The real `.env` is in `.gitignore`. Never commit it.

@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS scans (
     notifications_sent INTEGER DEFAULT 0,
     error TEXT
 );
+CREATE TABLE IF NOT EXISTS link_checks (
+    job_id INTEGER PRIMARY KEY REFERENCES jobs(id),
+    checked_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    url TEXT,
+    detail TEXT
+);
 CREATE TABLE IF NOT EXISTS source_checks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_id INTEGER,
@@ -108,6 +115,8 @@ CREATE TABLE IF NOT EXISTS meta (
 
 AGGREGATOR_PREFIXES = ("github_listings:", "markdown_table:")
 LINK_FRESH_WINDOW = timedelta(hours=1)
+VERIFY_PREFIX = "verify:"  # links confirmed by looking the posting up on the company's own board
+VERIFY_TTL = timedelta(hours=24)  # after this the posting is checked again
 SCHEMA_VERSION = "2"
 
 APPLICATION_STATUSES = ("new", "applied", "interviewing", "offer", "rejected", "ignored")
@@ -345,13 +354,51 @@ class Database:
                        WHERE j.last_seen < ?""", (cutoff,)):
                 links.setdefault(r["job_id"], []).append((r["source"], r["last_seen"] or ""))
 
+        verified_cutoff = _iso((now or utcnow()) - VERIFY_TTL)
+
         def dropped(source: str, seen: str) -> bool:
+            if source.startswith(VERIFY_PREFIX):
+                return seen < verified_cutoff
             if active_sources is not None and source not in active_sources:
                 return True  # source removed from sources.toml: it can't vouch for the posting anymore
             ok = last_ok.get(source)
             return bool(ok and ok > seen)
 
         return {job_id for job_id, ls in links.items() if all(dropped(s, seen) for s, seen in ls)}
+
+    # ------------------------------------------------------------------ link checks (bot/verify.py)
+    def record_link_check(self, job_id: int, status: str, url: str | None, detail: str,
+                          now: datetime | None = None) -> None:
+        self._exec("""INSERT INTO link_checks(job_id, checked_at, status, url, detail) VALUES(?,?,?,?,?)
+                      ON CONFLICT(job_id) DO UPDATE SET checked_at=excluded.checked_at, status=excluded.status,
+                      url=excluded.url, detail=excluded.detail""",
+                   (job_id, _iso(now or utcnow()), status, url, (detail or "")[:200]))
+
+    def recent_link_checks(self, since: datetime) -> set[int]:
+        """Jobs checked since `since` whose result was closed/unknown (open ones are handled by VERIFY_TTL)."""
+        return {r["job_id"] for r in self._exec(
+            "SELECT job_id FROM link_checks WHERE checked_at >= ? AND status IN ('closed', 'unknown')",
+            (_iso(since),)).fetchall()}
+
+    def verified_closed_ids(self) -> set[int]:
+        return {r["job_id"] for r in self._exec("SELECT job_id FROM link_checks WHERE status='closed'").fetchall()}
+
+    def link_check(self, job_id: int) -> dict | None:
+        r = self._one("SELECT * FROM link_checks WHERE job_id=?", (job_id,))
+        return dict(r) if r else None
+
+    def confirm_open(self, job_id: int, source: str, url: str, now: datetime | None = None) -> None:
+        """The company's own board still lists the posting: keep it open and point to that link."""
+        now_s = _iso(now or utcnow())
+        with self.transaction():
+            self.conn.execute("""INSERT INTO job_links(job_id, source, url, first_seen, last_seen) VALUES(?,?,?,?,?)
+                                 ON CONFLICT(job_id, source) DO UPDATE SET url=excluded.url,
+                                 last_seen=excluded.last_seen""", (job_id, source, url, now_s, now_s))
+            self.conn.execute("UPDATE jobs SET last_seen=? WHERE id=?", (now_s, job_id))
+            key = canonical_url_key(url)
+            if key and not self._is_generic_url_key(key):
+                self.conn.execute("INSERT OR IGNORE INTO job_keys(key, job_id) VALUES(?, ?)", (key, job_id))
+            self._refresh_best_url(job_id)
 
     def links_for(self, job_id: int) -> list[dict]:
         with self._lock:

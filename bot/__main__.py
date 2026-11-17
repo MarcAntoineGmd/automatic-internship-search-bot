@@ -109,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         db = Database(settings.database_path)
         jobs = db.all_jobs()
         active = {s.id for s in build_sources(load_sources_config(settings.sources_file))[0]}
-        data = (to_html(jobs, settings.timezone, stale_ids=db.stale_job_ids(active_sources=active))
+        stale = db.stale_job_ids(active_sources=active)
+        data = (to_html(jobs, settings.timezone, stale_ids=stale, closed_ids=stale & db.verified_closed_ids())
                 if args.format == "html" else to_csv(jobs, settings.timezone))
         out = Path(args.out or f"internships.{args.format}")
         out.write_bytes(data)

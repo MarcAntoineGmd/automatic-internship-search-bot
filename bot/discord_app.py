@@ -214,7 +214,8 @@ class RadarBot(discord.Client):
             tz = self.settings.timezone
             if fmt == "html":
                 stale = app.db.stale_job_ids(active_sources=app.scanner.source_ids())
-                data = await asyncio.to_thread(to_html, jobs, tz, None, mine, stale)
+                closed = stale & app.db.verified_closed_ids()
+                data = await asyncio.to_thread(to_html, jobs, tz, None, mine, stale, closed)
             else:
                 data = await asyncio.to_thread(to_csv, jobs, tz, mine)
             name = f"internships-{datetime.now().strftime('%Y-%m-%d')}.{fmt}"
