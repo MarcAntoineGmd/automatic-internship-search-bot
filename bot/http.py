@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -11,6 +12,22 @@ import httpx
 log = logging.getLogger(__name__)
 
 RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+# Every Workday tenant (RBC, TD, NVIDIA, …) sits behind the same rate limit, so all of them share one gate:
+# (max requests in flight, min seconds between request starts). Without it, ~30 tenants at once get HTTP 429.
+HOST_LIMITS: dict[str, tuple[int, float]] = {"myworkdayjobs.com": (2, 0.6), "myworkdaysite.com": (2, 0.6)}
+# After a request to such a group still gets 429 once retries are used up, leave the group alone for a while
+# (the rest of the scan skips it) instead of every tenant hammering it and prolonging the block.
+RATE_LIMIT_COOLDOWN = 15 * 60.0
+
+
+class _HostGate:
+    def __init__(self, name: str, concurrency: int, interval: float) -> None:
+        self.name = name
+        self.blocked_until = 0.0
+        self.sem = asyncio.Semaphore(concurrency)
+        self.lock = asyncio.Lock()
+        self.interval = interval
+        self.next_start = 0.0
 
 
 class SourceFetchError(Exception):
@@ -34,6 +51,29 @@ class HttpClient:
         self._sem = asyncio.Semaphore(concurrency)
         self._sleep = sleep
         self._etag_cache: dict[str, tuple[str, Any]] = {}
+        self._gates: dict[str, _HostGate] = {}
+
+    def _gate(self, url: str) -> _HostGate | None:
+        host = httpx.URL(url).host or ""
+        for suffix, (conc, interval) in HOST_LIMITS.items():
+            if host == suffix or host.endswith("." + suffix):
+                if suffix not in self._gates:
+                    self._gates[suffix] = _HostGate(suffix, conc, interval)
+                return self._gates[suffix]
+        return None
+
+    async def _send(self, gate: _HostGate | None, method: str, url: str, **kwargs) -> httpx.Response:
+        if gate is None:
+            async with self._sem:
+                return await self.client.request(method, url, **kwargs)
+        async with gate.sem:
+            async with gate.lock:  # space out request starts for the whole host group
+                wait = gate.next_start - time.monotonic()
+                if wait > 0:
+                    await self._sleep(wait)
+                gate.next_start = max(time.monotonic(), gate.next_start) + gate.interval
+            async with self._sem:
+                return await self.client.request(method, url, **kwargs)
 
     def _delay(self, attempt: int, retry_after: str | None) -> float:
         if retry_after:
@@ -45,10 +85,13 @@ class HttpClient:
 
     async def request(self, method: str, url: str, **kwargs) -> httpx.Response:
         last_exc: Exception | None = None
+        gate = self._gate(url)
         for attempt in range(self.max_retries + 1):
+            if gate is not None and gate.blocked_until > time.monotonic():
+                mins = max(1, round((gate.blocked_until - time.monotonic()) / 60))
+                raise SourceFetchError(f"HTTP 429 (rate limited) from {gate.name}; skipped, retrying in ~{mins} min")
             try:
-                async with self._sem:
-                    resp = await self.client.request(method, url, **kwargs)
+                resp = await self._send(gate, method, url, **kwargs)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
@@ -58,10 +101,19 @@ class HttpClient:
                 await self._sleep(delay)
                 continue
             if resp.status_code in RETRY_STATUSES and attempt < self.max_retries:
-                delay = self._delay(attempt, resp.headers.get("Retry-After"))
+                retry_after = resp.headers.get("Retry-After")
+                delay = self._delay(attempt, retry_after)
+                if resp.status_code == 429 and not retry_after:  # rate limited: back off for real
+                    delay = max(delay, min(self.max_backoff, 5.0 * (2 ** attempt)))
+                if gate is not None:  # pause the whole host group, not just this request
+                    gate.next_start = max(gate.next_start, time.monotonic() + delay)
                 log.debug("%s %s -> %s; retrying in %.1fs", method, url, resp.status_code, delay)
                 await self._sleep(delay)
                 continue
+            if resp.status_code == 429 and gate is not None:
+                gate.blocked_until = time.monotonic() + RATE_LIMIT_COOLDOWN
+                log.warning("%s is rate-limiting us (HTTP 429); pausing it for %d min", gate.name,
+                            RATE_LIMIT_COOLDOWN // 60)
             return resp
         kind = type(last_exc).__name__ if last_exc else "error"
         raise SourceFetchError(f"{kind} after {self.max_retries + 1} attempts: {url}") from last_exc

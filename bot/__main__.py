@@ -17,9 +17,23 @@ from pathlib import Path
 from .config import load_settings
 
 
-def _setup_logging(level: str) -> None:
-    logging.basicConfig(level=getattr(logging, level, logging.INFO),
-                        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+def _setup_logging(level: str, log_file: str | None = None) -> None:
+    fmt = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+    handlers: list[logging.Handler] = []
+    if sys.stderr is not None:  # pythonw.exe (background mode) has no console
+        handlers.append(logging.StreamHandler())
+    if log_file:
+        from logging.handlers import RotatingFileHandler
+
+        try:
+            handlers.append(RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=3, encoding="utf-8"))
+        except OSError as exc:
+            print(f"Cannot write log file {log_file}: {exc}", file=sys.stderr or sys.stdout)
+    logging.basicConfig(level=getattr(logging, level, logging.INFO), format=fmt, handlers=handlers or None, force=True)
+
+    def _log_crash(exc_type, exc, tb):
+        logging.getLogger("bot").critical("Unhandled error, the bot stopped", exc_info=(exc_type, exc, tb))
+    sys.excepthook = _log_crash
     logging.getLogger("discord.http").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -30,6 +44,7 @@ async def _scan_once(args) -> int:
     settings = load_settings()
     if args.temp_db:
         settings.database_url = "sqlite:///" + str(Path(tempfile.mkdtemp()) / "smoke.db")
+        settings.export_html_path = None  # don't overwrite your real internships.html with test data
     if args.sources_file:
         settings.sources_file = args.sources_file
     app = RadarApp(settings)
@@ -80,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = load_settings()
-    _setup_logging(settings.log_level)
+    _setup_logging(settings.log_level, settings.log_file if args.cmd is None else None)
 
     if args.cmd == "scan":
         return asyncio.run(_scan_once(args))
@@ -88,9 +103,14 @@ def main(argv: list[str] | None = None) -> int:
         from .db import Database
         from .export import to_csv, to_html
 
+        from .config import load_sources_config
+        from .sources import build_sources
+
         db = Database(settings.database_path)
         jobs = db.all_jobs()
-        data = to_html(jobs, settings.timezone) if args.format == "html" else to_csv(jobs, settings.timezone)
+        active = {s.id for s in build_sources(load_sources_config(settings.sources_file))[0]}
+        data = (to_html(jobs, settings.timezone, stale_ids=db.stale_job_ids(active_sources=active))
+                if args.format == "html" else to_csv(jobs, settings.timezone))
         out = Path(args.out or f"internships.{args.format}")
         out.write_bytes(data)
         db.close()
@@ -109,12 +129,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if not settings.discord_bot_token:
-        print("DISCORD_BOT_TOKEN is not set. Copy .env.example to .env and fill it in (see README.md).\n"
-              "You can still test sources without Discord: python -m bot scan --temp-db", file=sys.stderr)
+        msg = ("DISCORD_BOT_TOKEN is not set in .env, so the bot cannot log in to Discord. Put your token in .env "
+               "(see README.md).\nYou can still test sources without Discord: python -m bot scan --temp-db")
+        logging.getLogger("bot").error(msg)  # console + bot.log
         return 2
     from .discord_app import RadarBot
 
     bot = RadarBot(settings)
+    logging.getLogger("bot").info("Starting the Discord bot (log file: %s)", settings.log_file or "off")
     bot.run(settings.discord_bot_token, log_handler=None)
     return 0
 

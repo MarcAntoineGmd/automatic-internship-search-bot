@@ -12,3 +12,5 @@ venv/
 internships.html
 internships.html.tmp
 internships.csv
+bot.log
+bot.log.*

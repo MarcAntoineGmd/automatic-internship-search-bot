@@ -66,7 +66,10 @@ def test_html_has_badges_and_filter_buttons(db):
     store(db, source_job_id="b", title="Backend Developer Intern (Winter 2027)", location="Toronto, ON",
           url="https://e.example/b")
     page = to_html(db.all_jobs()).decode()
-    assert "data-prov='QC'" in page and "data-season='Summer'" in page
-    assert "data-prov='ON'" in page and "data-season='Winter'" in page
-    assert "🔵 Québec (1)" in page and "🔴 Ontario (1)" in page and "☀️ Été (1)" in page and "❄️ Hiver (1)" in page
+    assert "data-prov='QC'" in page and "data-term='Summer-2027'" in page
+    assert "data-prov='ON'" in page and "data-term='Winter-2027'" in page
+    assert "🔵 Québec (1)" in page and "🔴 Ontario (1)" in page
+    assert "☀️ Été 2027 (1)" in page and "❄️ Hiver 2027 (1)" in page
+    # chronological: Winter 2027 button comes before Summer 2027
+    assert page.index("data-value='Winter-2027'") < page.index("data-value='Summer-2027'")
     assert "class='prov p-QC'" in page and "class='season s-Summer'" in page

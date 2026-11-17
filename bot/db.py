@@ -329,6 +329,30 @@ class Database:
                                             -(parse_datetime(l["last_seen"]) or newest).timestamp()))[0]
         self._exec("UPDATE jobs SET url=? WHERE id=? AND COALESCE(url,'') != ?", (best["url"], job_id, best["url"]))
 
+    def stale_job_ids(self, now: datetime | None = None, older_than: timedelta = timedelta(hours=12),
+                      active_sources: set[str] | None = None) -> set[int]:
+        """Postings that are probably closed: every source that listed them was checked successfully since
+        and no longer lists them, and nobody has listed them for `older_than`.
+
+        A source that is failing (e.g. rate-limited) never makes its postings look closed."""
+        cutoff = _iso((now or utcnow()) - older_than)
+        with self._lock:
+            last_ok = {r["source"]: r["last_ok"] for r in self.conn.execute(
+                "SELECT source, MAX(started_at) AS last_ok FROM source_checks WHERE ok=1 GROUP BY source")}
+            links: dict[int, list[tuple[str, str]]] = {}
+            for r in self.conn.execute(
+                    """SELECT l.job_id, l.source, l.last_seen FROM job_links l JOIN jobs j ON j.id = l.job_id
+                       WHERE j.last_seen < ?""", (cutoff,)):
+                links.setdefault(r["job_id"], []).append((r["source"], r["last_seen"] or ""))
+
+        def dropped(source: str, seen: str) -> bool:
+            if active_sources is not None and source not in active_sources:
+                return True  # source removed from sources.toml: it can't vouch for the posting anymore
+            ok = last_ok.get(source)
+            return bool(ok and ok > seen)
+
+        return {job_id for job_id, ls in links.items() if all(dropped(s, seen) for s, seen in ls)}
+
     def links_for(self, job_id: int) -> list[dict]:
         with self._lock:
             return [dict(r) for r in self.conn.execute(

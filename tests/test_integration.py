@@ -155,3 +155,46 @@ async def test_full_scan_end_to_end(settings, tmp_path):
     assert db2.count_jobs() == 11 and db2.count_notified() == 11
     await http2.client.aclose()
     db2.close()
+
+
+def test_temp_db_smoke_scan_does_not_touch_your_html_list(tmp_path, monkeypatch):
+    """`python -m bot scan --temp-db` used to overwrite internships.html with throwaway data."""
+    import logging
+    import sys
+    from pathlib import Path
+
+    from bot.__main__ import main
+
+    repo = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
+    root, hook = logging.getLogger().handlers[:], sys.excepthook
+    try:
+        assert main(["scan", "--temp-db", "--only", "nothing", "--sources-file", str(repo / "sources.toml")]) in (0, 1)
+    finally:
+        logging.getLogger().handlers[:] = root
+        sys.excepthook = hook
+    assert not (tmp_path / "internships.html").exists()
+
+
+def test_background_mode_writes_a_log_file(tmp_path, monkeypatch):
+    """pythonw.exe has no console, so errors must end up in bot.log."""
+    import logging
+    import sys
+
+    from bot.__main__ import _setup_logging
+
+    root, hook = logging.getLogger().handlers[:], sys.excepthook
+    monkeypatch.setattr(sys, "stderr", None)  # like pythonw.exe
+    try:
+        _setup_logging("INFO", str(tmp_path / "bot.log"))
+        logging.getLogger("bot").error("token missing")
+        sys.excepthook(RuntimeError, RuntimeError("boom"), None)
+        for h in logging.getLogger().handlers:
+            h.flush()
+    finally:
+        for h in logging.getLogger().handlers:
+            h.close()
+        logging.getLogger().handlers[:] = root
+        sys.excepthook = hook
+    text = (tmp_path / "bot.log").read_text(encoding="utf-8")
+    assert "token missing" in text and "Unhandled error" in text and "boom" in text

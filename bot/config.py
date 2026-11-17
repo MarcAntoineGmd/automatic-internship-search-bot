@@ -50,6 +50,8 @@ class Settings:
     scan_interval_minutes: int = 30
     database_url: str = "sqlite:///./jobs.db"
     log_level: str = "INFO"
+    log_file: str | None = "bot.log"  # rotating log next to the bot (pythonw has no console); empty = off
+    source_timeout_seconds: float = 600.0  # a source that takes longer is cancelled so scans never hang
     sources_file: str = "sources.toml"
     filters: FilterConfig = field(default_factory=FilterConfig)
     notify_min_score: int = 55
@@ -105,6 +107,8 @@ def load_settings(env: dict[str, str] | None = None, load_dotenv_file: bool = Tr
         scan_interval_minutes=max(5, _int(g("SCAN_INTERVAL_MINUTES"), 30)),
         database_url=g("DATABASE_URL") or "sqlite:///./jobs.db",
         log_level=(g("LOG_LEVEL") or "INFO").upper(),
+        log_file=(g("LOG_FILE") if g("LOG_FILE") is not None else "bot.log") or None,
+        source_timeout_seconds=float(g("SOURCE_TIMEOUT_SECONDS") or 600),
         sources_file=g("SOURCES_FILE") or "sources.toml",
         filters=filters,
         notify_min_score=_int(g("NOTIFY_MIN_SCORE"), max(55, filters.min_score)),

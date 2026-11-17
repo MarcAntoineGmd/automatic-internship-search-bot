@@ -77,6 +77,9 @@ class Scanner:
         self._lock = asyncio.Lock()
         self.last_report: ScanReport | None = None
 
+    def source_ids(self) -> set[str]:
+        return {src.id for src in self.sources}
+
     @property
     def running(self) -> bool:
         return self._lock.locked()
@@ -95,11 +98,14 @@ class Scanner:
         t0 = time.perf_counter()
         async with sem:
             try:
-                jobs = await source.fetch(self.http, ctx)
+                jobs = await asyncio.wait_for(source.fetch(self.http, ctx),
+                                              timeout=self.settings.source_timeout_seconds)
                 return SourceResult(source, True, jobs=jobs, started_at=started,
                                     duration_ms=int((time.perf_counter() - t0) * 1000))
             except SourceFetchError as exc:
                 err = str(exc)
+            except asyncio.TimeoutError:
+                err = f"took longer than {self.settings.source_timeout_seconds:.0f} s, cancelled"
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # parsing bugs etc. must never break other sources
@@ -176,7 +182,9 @@ class Scanner:
             try:
                 from .export import write_html_export
 
-                write_html_export(self.db.all_jobs(), s.export_html_path, s.timezone, now=self.now())
+                jobs, stale = self.db.all_jobs(), self.db.stale_job_ids(self.now(), active_sources=self.source_ids())
+                # rendering ~500 rows takes ~0.15 s: do it off the event loop so Discord commands stay instant
+                await asyncio.to_thread(write_html_export, jobs, s.export_html_path, s.timezone, self.now(), stale)
             except Exception:
                 log.exception("Could not write %s", s.export_html_path)
         log.info("Scan %s (%s): %s", report.scan_id, trigger, report.summary())

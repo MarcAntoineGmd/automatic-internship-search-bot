@@ -1,6 +1,7 @@
 """discord.py client: slash commands, DM delivery, scheduler start-up."""
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 from datetime import datetime
@@ -208,12 +209,17 @@ class RadarBot(discord.Client):
             # Anyone in the server can download the list; only the owner's copy includes application statuses.
             mine = app.is_owner(interaction.user.id)
             fmt = format.value if format else "html"
+            await interaction.response.defer(ephemeral=True, thinking=True)
             jobs = app.db.all_jobs()
             tz = self.settings.timezone
-            data = to_html(jobs, tz, include_status=mine) if fmt == "html" else to_csv(jobs, tz, include_status=mine)
+            if fmt == "html":
+                stale = app.db.stale_job_ids(active_sources=app.scanner.source_ids())
+                data = await asyncio.to_thread(to_html, jobs, tz, None, mine, stale)
+            else:
+                data = await asyncio.to_thread(to_csv, jobs, tz, mine)
             name = f"internships-{datetime.now().strftime('%Y-%m-%d')}.{fmt}"
             note = " Your status column updates with /applied." if mine else ""
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"{len(jobs)} internships found since the start, best first. Open the file in your browser.{note}",
                 file=discord.File(io.BytesIO(data), filename=name), ephemeral=True)
 

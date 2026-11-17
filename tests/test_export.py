@@ -4,6 +4,8 @@ from __future__ import annotations
 import csv
 import io
 
+import pytest
+
 from bot.classify import FilterConfig, classify
 from bot.export import COLUMNS, to_csv, to_html
 from tests.conftest import NOW, make_job
@@ -22,8 +24,9 @@ def test_csv_contains_every_job_best_first(db):
     assert data.startswith(b"\xef\xbb\xbf")  # BOM for Excel accents
     rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
     assert rows[0] == COLUMNS and len(rows) == 3
-    assert rows[1][0] == str(best) and rows[1][4].startswith("Développeur") and "Québec" in rows[1][6]
-    assert rows[1][-1] == "https://e.example/j/b" and rows[1][12] == "new"
+    assert rows[1][0] == str(best) and rows[1][4].startswith("Développeur") and "Québec" in rows[1][7]
+    assert rows[1][5] == "Logiciel (général)" and rows[2][5] == "Données"
+    assert rows[1][-1] == "https://e.example/j/b" and rows[1][13] == "new"
 
 
 def test_html_is_escaped_and_clickable(db):
@@ -90,12 +93,71 @@ def test_shared_export_hides_my_application_status(db):
 
 def test_html_flags_postings_no_source_lists_anymore(db):
     from datetime import timedelta
-    job = make_job(source_job_id="old", title="Software Engineer Intern Old", url="https://e.example/j/old")
-    db.insert_job(job, classify(job, FilterConfig(), now=NOW), now=NOW - timedelta(hours=13))
+    old = make_job(source_job_id="old", title="Software Engineer Intern Old", url="https://e.example/j/old")
+    db.insert_job(old, classify(old, FilterConfig(), now=NOW), now=NOW - timedelta(hours=13))
     store(db, source_job_id="live", title="Software Engineer Intern Live", url="https://e.example/j/live")
-    page = to_html(db.all_jobs(), now=NOW).decode()
+    # the source was checked successfully after it last listed "old" -> it dropped it
+    db.record_source_check(None, "test:board", True, NOW - timedelta(minutes=5), 10)
+    stale = db.stale_job_ids(NOW)
+    page = to_html(db.all_jobs(), now=NOW, stale_ids=stale).decode()
     old_row = next(r for r in page.split("<tr") if "j/old" in r)
     live_row = next(r for r in page.split("<tr") if "j/live" in r)
     assert "data-status='stale'" in old_row and "Peut-être fermé" in old_row
     assert "data-status='open'" in live_row and "Peut-être fermé" not in live_row
     assert "Ouverts (1)" in page and "Peut-être fermés (1)" in page
+
+
+def test_failing_source_never_makes_postings_look_closed(db):
+    """Workday rate-limited us for a day: its postings must not be flagged as closed."""
+    from datetime import timedelta
+    job = make_job(source="workday:rbc/x", source_job_id="r1", url="https://e.example/j/r1")
+    db.insert_job(job, classify(job, FilterConfig(), now=NOW), now=NOW - timedelta(hours=30))
+    db.record_source_check(None, "workday:rbc/x", True, NOW - timedelta(hours=31), 10)   # last success: before
+    db.record_source_check(None, "workday:rbc/x", False, NOW - timedelta(minutes=5), 10, error="HTTP 429")
+    assert db.stale_job_ids(NOW) == set()
+    # ...but a source removed from sources.toml can't vouch for it anymore
+    assert db.stale_job_ids(NOW, active_sources={"other:src"}) == {db.find_duplicate(job, use_fingerprint=False)}
+
+
+def test_html_sector_column_and_multi_select_filters(db):
+    store(db, source_job_id="e", title="Embedded Software Intern (Winter 2027)", url="https://e.example/j/e")
+    store(db, source_job_id="w", title="Full Stack Developer Intern (Summer 2027)", url="https://e.example/j/w")
+    store(db, source_job_id="m", title="Machine Learning Engineer Intern (Fall 2027)", url="https://e.example/j/m")
+    page = to_html(db.all_jobs(), now=NOW).decode()
+    assert "data-sector='embedded'" in page and "data-sector='fullstack web'" in page and "data-sector='ai'" in page
+    assert "🔌 Embarqué / Firmware (1)" in page and "🌐 Web (1)" in page and "🤖 IA / ML (1)" in page
+    assert "Été 2027 (1)" in page and "Hiver 2027 (1)" in page and "Automne 2027 (1)" in page
+    # one Set per group: several values in a group are OR-ed, groups are AND-ed, state kept in the URL
+    assert "sel[g].has(v))sel[g].delete(v);else sel[g].add(v)" in page
+    assert "some(x=>sel[g].has(x))" in page and "history.replaceState" in page
+
+
+async def test_multi_select_filters_in_a_real_browser(db, tmp_path):
+    playwright = pytest.importorskip("playwright.async_api")
+    store(db, source_job_id="e", title="Embedded Software Intern (Winter 2027)", url="https://e.example/j/e")
+    store(db, source_job_id="w", title="Full Stack Developer Intern (Summer 2027)", url="https://e.example/j/w")
+    store(db, source_job_id="m", title="Machine Learning Engineer Intern (Fall 2027)", url="https://e.example/j/m")
+    f = tmp_path / "list.html"
+    f.write_bytes(to_html(db.all_jobs(), now=NOW))
+    try:
+        async with playwright.async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.goto(f.as_uri())
+            shown = "() => [...document.querySelectorAll('#t tbody tr')].filter(r => r.style.display !== 'none').length"
+            assert await page.evaluate(shown) == 3
+            await page.click(".chip[data-group=term][data-value=Winter-2027]")
+            await page.click(".chip[data-group=term][data-value=Summer-2027]")
+            assert await page.evaluate(shown) == 2          # Winter OR Summer
+            await page.click(".chip[data-group=sector][data-value=embedded]")
+            assert await page.evaluate(shown) == 1          # ... AND embedded
+            await page.reload()                             # selection survives a refresh (URL hash)
+            assert await page.evaluate(shown) == 1
+            await page.click(".chip[data-group=term][data-value='']")
+            await page.click(".chip[data-group=sector][data-value='']")
+            assert await page.evaluate(shown) == 3
+            await browser.close()
+    except Exception as exc:  # no browser installed on this machine
+        if "Executable doesn't exist" in str(exc) or "playwright install" in str(exc):
+            pytest.skip("Chromium not installed")
+        raise

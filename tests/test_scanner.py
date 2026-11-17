@@ -217,3 +217,47 @@ async def test_rejected_jobs_are_cached_and_not_reclassified(settings, db):
     assert r1.rejected == 1 and db.is_known_uid("fake:a:s")
     r2 = await scanner.run()
     assert r2.rejected == 1 and r2.new_jobs == 0 and db.count_jobs() == 0
+
+
+# ------------------------------------------------------------------ Workday rate limit
+async def test_workday_tenants_share_one_throttle(router):
+    """RBC, TD, NVIDIA… all count against the same Workday rate limit: requests are spaced out together."""
+    from bot.http import HOST_LIMITS
+
+    starts = []
+
+    async def fake_sleep(d):
+        starts.append(d)
+
+    router.add("GET", r"myworkdayjobs\.com", {"ok": True})
+    router.add("GET", r"greenhouse\.io", {"ok": True})
+    http = HttpClient(httpx.AsyncClient(transport=httpx.MockTransport(router.handler)), sleep=fake_sleep)
+    await asyncio.gather(*(http.get_json(f"https://{t}.wd3.myworkdayjobs.com/wday/cxs/{t}/x/jobs")
+                           for t in ("rbc", "td", "bmo", "cibc")))
+    interval = HOST_LIMITS["myworkdayjobs.com"][1]
+    assert len(starts) == 3 and all(d > interval * 0.5 for d in starts)  # every request after the first waited
+    starts.clear()
+    await asyncio.gather(*(http.get_json(f"https://boards-api.greenhouse.io/v1/boards/b{i}/jobs") for i in range(4)))
+    assert starts == []  # other hosts are not slowed down
+
+
+async def test_workday_429_pauses_all_tenants_for_the_rest_of_the_scan(router):
+    router.add("POST", r"rbc\.wd3", httpx.Response(429))
+    router.add("POST", r"td\.wd3", {"jobPostings": [], "total": 0})
+    http = make_http(router, max_retries=2)
+    with pytest.raises(SourceFetchError, match="429"):
+        await http.post_json("https://rbc.wd3.myworkdayjobs.com/wday/cxs/rbc/x/jobs", {})
+    assert router.count(r"rbc\.wd3") == 3
+    with pytest.raises(SourceFetchError, match="rate limited"):  # skipped without a request
+        await http.post_json("https://td.wd3.myworkdayjobs.com/wday/cxs/td/y/jobs", {})
+    assert router.count(r"td\.wd3") == 0
+
+
+async def test_hung_source_is_cancelled_and_scan_finishes(settings, db):
+    settings.source_timeout_seconds = 0.05
+    slow = FakeSource("hung", jobs_ab(), delay=5)
+    ok = FakeSource("ok", [make_job(source="fake:ok", source_job_id="z", url="https://e.example/z")])
+    scanner, _ = build(settings, db, [slow, ok])
+    report = await asyncio.wait_for(scanner.run(), timeout=3)
+    assert "fake:hung" in report.errors and "longer than" in report.errors["fake:hung"]
+    assert report.sources_ok == 1

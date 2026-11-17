@@ -13,7 +13,8 @@ Filtering is deterministic (no LLM, no paid APIs). Every job is notified **at mo
 python -m venv .venv
 source .venv/bin/activate # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env # Windows: copy .env.example .env   -> then fill in the Discord values (section 2)
+cp -n .env.example .env   # Windows: if (!(Test-Path .env)) { copy .env.example .env }   -> then fill in the Discord values (section 2)
+# Never copy over an existing .env: it would erase your token.
 
 python -m bot scan --temp-db # optional: check the sources without Discord, using a throwaway DB
 python -m bot # run the bot (keeps running; scans at startup, then every 30 minutes)
@@ -75,7 +76,12 @@ Jobs already notified are never re-posted when you switch.
 ### Telling Québec, Ontario and terms apart
 Every post starts with tags, e.g. **🔵 QC · ☀️ Été 2027 | Software Developer Intern**, and the embed colour matches the province: blue for Québec, red for Ontario, green for BC, yellow for Alberta.
 The terms are ❄️ Hiver, ☀️ Été, 🍂 Automne (and 🌱 Printemps), and ❔ when the posting doesn't say.
-The HTML list has the same badges plus filter buttons: *Province* (Québec / Ontario / Ailleurs) and *Session* (Hiver / Été / Automne).
+The HTML list has the same badges plus filter buttons: *Statut*, *Province* (Québec / Ontario / Ailleurs), *Session* (Hiver 2027, Été 2027, …) and
+*Secteur* (Backend, Frontend, Full-stack, Web, Mobile, Embarqué / Firmware, Systèmes / Bas niveau, DevOps / Cloud, IA / ML, Données,
+Cybersécurité, QA, Jeux vidéo, Robotique, Finance / Trading, Logiciel général). Click several buttons in the same row to combine them
+(Hiver 2027 **or** Été 2027); different rows are combined with **and**. Your selection is kept in the page address, so a refresh keeps it.
+The sector comes from the title; only for generic titles ("Software Engineer Intern") is the description used, and then it needs at least
+three distinct keywords.
 
 ### Full list of everything found
 After every scan the bot rewrites **`internships.html`** in the project folder. It lists every match found since the first run, best first, with a **NEW** badge on the last 24 h.
@@ -86,8 +92,9 @@ The file is git-ignored because it includes your application statuses. Set `EXPO
 - Every source that lists a posting has its link saved. The *Apply* link is the one a source listed in the latest scans,
   and the company's own career site beats the trackers. So when a tracker drops a posting (or its old link dies) while the
   company still lists it, the link switches to the company's page by itself.
-- A posting that **no** source has listed for 12 h is greyed out with **⚠️ Peut-être fermé** and hidden by default
-  (filter *Statut*: Ouverts / Peut-être fermés / Tous).
+- A posting is greyed out with **⚠️ Peut-être fermé** (and hidden by default, filter *Statut*) when every source that listed it
+  was checked successfully afterwards and no longer lists it, and nobody has listed it for 12 h. A source that is failing
+  (e.g. rate-limited) never makes its postings look closed.
 
 ### Manual DM verification (real Discord)
 1. Fill in `.env` and run `python -m bot`. The log should show `Logged in as …` and `Synced 8 slash commands to guild …`.
@@ -169,6 +176,8 @@ All settings are listed in `.env.example`. The main ones:
 | `DAILY_SUMMARY_ENABLED`, `DAILY_SUMMARY_HOUR`, `TIMEZONE` | false, 9, America/Toronto | Optional daily digest |
 | `SOURCES_FILE` | sources.toml | Source list |
 | `EXPORT_HTML_PATH` | internships.html | Growing list of every match, rewritten after each scan (empty = off) |
+| `LOG_FILE` | bot.log | Log file next to the bot (rotates at 1 MB, keeps 3). The only place errors show up in background mode. Empty = off |
+| `SOURCE_TIMEOUT_SECONDS` | 600 | A source that takes longer is cancelled, so one stuck site can never stall the scans |
 
 The real `.env` is in `.gitignore`. Never commit it.
 
@@ -209,6 +218,9 @@ Create `bot/sources/<name>.py` with a `Source` subclass. Set `kind`, implement `
 ## 7. Known limitations
 - Workday board ids (except RBC, which was checked live) come from real application URLs in the trackers. Workday
   sometimes renames sites. A renamed site shows as a 4xx error in `/status`.
+- All Workday sites (RBC, TD, BMO, Desjardins, NVIDIA, …) share one rate limit. The bot spaces its Workday requests
+  (2 at a time, 0.6 s apart) and, if Workday still answers HTTP 429, leaves all Workday sites alone for 15 min. Those
+  sources then show as failed in `/status` until the limit lifts; their postings are kept and are not marked closed.
 - Workday's list endpoint only returns relative dates ("Posted 30+ Days Ago"). The exact date is read from the job detail, and older ones stay *unknown*.
 - vanshb03 links are `go.vansh.nyc` short links. The bot resolves them so it can de-duplicate. If that fails, it falls back to company+title matching.
 - Postings with no location at all are kept with a lower score instead of being dropped, so expect the occasional US-only role marked *Location unknown*.
