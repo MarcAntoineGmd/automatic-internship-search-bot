@@ -247,7 +247,7 @@ async def test_workday_429_pauses_all_tenants_for_the_rest_of_the_scan(router):
     http = make_http(router, max_retries=2)
     with pytest.raises(SourceFetchError, match="429"):
         await http.post_json("https://rbc.wd3.myworkdayjobs.com/wday/cxs/rbc/x/jobs", {})
-    assert router.count(r"rbc\.wd3") == 3
+    assert router.count(r"rbc\.wd3") == 1  # a shared rate limit is not retried right away
     with pytest.raises(SourceFetchError, match="rate limited"):  # skipped without a request
         await http.post_json("https://td.wd3.myworkdayjobs.com/wday/cxs/td/y/jobs", {})
     assert router.count(r"td\.wd3") == 0
@@ -261,3 +261,80 @@ async def test_hung_source_is_cancelled_and_scan_finishes(settings, db):
     report = await asyncio.wait_for(scanner.run(), timeout=3)
     assert "fake:hung" in report.errors and "longer than" in report.errors["fake:hung"]
     assert report.sources_ok == 1
+
+
+async def test_workday_pause_grows_and_survives_a_restart(settings, db, router):
+    """15 min, then 1 h, 4 h… and the pause is saved in the database, so a restart doesn't resume hammering."""
+    import time
+
+    from bot.http import HttpClient
+
+    router.add("POST", r"myworkdayjobs\.com", httpx.Response(429))
+    http = make_http(router)
+    for expected in (15, 60, 240):
+        gate = http._gate("https://rbc.wd3.myworkdayjobs.com/x")
+        gate.blocked_until = 0  # pretend the previous pause is over
+        with pytest.raises(SourceFetchError):
+            await http.post_json("https://rbc.wd3.myworkdayjobs.com/wday/cxs/rbc/x/jobs", {})
+        assert round((gate.blocked_until - time.time()) / 60) == expected
+    state = http.rate_limit_state()
+    fresh = HttpClient(httpx.AsyncClient(transport=httpx.MockTransport(router.handler)))
+    fresh.load_rate_limit_state(state)
+    n = router.count(r"myworkdayjobs")
+    with pytest.raises(SourceFetchError, match="paused"):
+        await fresh.post_json("https://td.wd3.myworkdayjobs.com/wday/cxs/td/y/jobs", {})
+    assert router.count(r"myworkdayjobs") == n  # no request sent
+
+
+async def test_workday_sources_are_checked_every_two_hours(settings, db):
+    from datetime import timedelta
+
+    from bot.sources.workday import WorkdaySource
+
+    clock = [NOW]
+    wd = WorkdaySource(company="RBC", host="rbc.wd3.myworkdayjobs.com", site="x", search=[""])
+    calls = []
+
+    async def fake_fetch(http, ctx):
+        calls.append(clock[0])
+        return []
+
+    wd.fetch = fake_fetch
+    other = FakeSource("a", [])
+    scanner = Scanner(settings, db, [wd, other], make_http_dummy(), now=lambda: clock[0])
+    r1 = await scanner.run()
+    clock[0] = NOW + timedelta(minutes=30)
+    r2 = await scanner.run()
+    clock[0] = NOW + timedelta(minutes=125)
+    await scanner.run()
+    assert len(calls) == 2 and other.calls == 3
+    assert r1.sources_skipped == 0 and r2.sources_skipped == 1 and "not due 1" in r2.summary()
+
+
+def test_only_one_copy_of_the_bot_can_run(tmp_path):
+    from bot.__main__ import acquire_single_instance_lock
+
+    first = acquire_single_instance_lock(tmp_path / "jobs.db.lock")
+    assert first is not None
+    assert acquire_single_instance_lock(tmp_path / "jobs.db.lock") is None   # second copy refused
+    first.close()
+    again = acquire_single_instance_lock(tmp_path / "jobs.db.lock")           # free again once it stops
+    assert again is not None
+    again.close()
+
+
+def test_windows_disconnect_noise_is_filtered():
+    import logging
+
+    from bot.__main__ import _DropWindowsDisconnectNoise
+
+    f = _DropWindowsDisconnectNoise()
+    try:
+        raise ConnectionResetError(10054, "connection closed by remote host")
+    except ConnectionResetError:
+        import sys
+        noisy = logging.LogRecord("asyncio", logging.ERROR, "", 0,
+                                  "Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)",
+                                  None, sys.exc_info())
+    real = logging.LogRecord("asyncio", logging.ERROR, "", 0, "Task exception was never retrieved", None, None)
+    assert not f.filter(noisy) and f.filter(real)

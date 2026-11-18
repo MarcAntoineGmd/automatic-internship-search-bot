@@ -14,3 +14,4 @@ internships.html.tmp
 internships.csv
 bot.log
 bot.log.*
+*.db.lock

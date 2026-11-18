@@ -261,7 +261,7 @@ class LinkChecker:
 
     # ------------------------------------------------------------------ scan step
     async def run(self, now: datetime, active_sources: set[str] | None = None) -> dict[str, int]:
-        stats = {"checked": 0, "open": 0, "moved": 0, "closed": 0, "unknown": 0}
+        stats = {"checked": 0, "open": 0, "moved": 0, "closed": 0, "unknown": 0, "retry": 0}
         if self.limit <= 0:
             return stats
         stale = self.db.stale_job_ids(now, active_sources=active_sources)
@@ -275,14 +275,15 @@ class LinkChecker:
                 log.exception("Link check failed for job %s", job.id)
                 result = CheckResult("unknown", detail="error")
             stats["checked"] += 1
-            stats[result.status] += 1
             stored = "retry" if result.status == "unknown" and result.detail not in FINAL_UNKNOWN else result.status
+            stats[stored] += 1
             self.db.record_link_check(job.id, stored, result.url, result.detail, now)
             if result.status in ("open", "moved") and result.url:
                 ref = parse_ref(result.url)
                 self.db.confirm_open(job.id, f"verify:{ref.ats if ref else 'site'}", result.url, now)
         if stats["checked"]:
             log.info("Link check: %(checked)d possibly-closed postings checked on company sites — %(open)d still "
-                     "open, %(moved)d re-posted (link updated), %(closed)d closed, %(unknown)d unknown", stats)
+                     "open, %(moved)d re-posted (link updated), %(closed)d closed, %(unknown)d site not supported, "
+                     "%(retry)d to retry (site busy or rate-limited)", stats)
         return stats
 

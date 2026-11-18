@@ -42,6 +42,8 @@ def parse_posted_on(text: str | None):
 class WorkdaySource(Source):
     kind = "workday"
     priority = 20
+    # All Workday sites share one rate limit (bot/http.py); every 2 h is plenty for internship postings.
+    min_interval_minutes = 120
 
     def __init__(self, host: str | None = None, tenant: str | None = None, site: str | None = None,
                  search: list[str] | None = None, max_pages: int = 10, **kw) -> None:

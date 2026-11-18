@@ -227,9 +227,13 @@ Create `bot/sources/<name>.py` with a `Source` subclass. Set `kind`, implement `
 ## 7. Known limitations
 - Workday board ids (except RBC, which was checked live) come from real application URLs in the trackers. Workday
   sometimes renames sites. A renamed site shows as a 4xx error in `/status`.
-- All Workday sites (RBC, TD, BMO, Desjardins, NVIDIA, …) share one rate limit. The bot spaces its Workday requests
-  (2 at a time, 0.6 s apart) and, if Workday still answers HTTP 429, leaves all Workday sites alone for 15 min. Those
-  sources then show as failed in `/status` until the limit lifts; their postings are kept and are not marked closed.
+- All Workday sites (RBC, TD, BMO, Desjardins, NVIDIA, …) share one rate limit. The bot checks them every 2 h (not every
+  scan), spaces its requests (2 at a time, 0.6 s apart) and, if Workday answers HTTP 429, leaves all Workday sites alone:
+  15 min, then 1 h, 4 h, 16 h, 24 h if it keeps happening (reset after a success; remembered across restarts). Those
+  sources show as failed in `/status` meanwhile; their postings are kept, are not marked closed, and most of them are
+  still covered by the trackers.
+- Only one copy of the bot can run at a time (lock file `jobs.db.lock`). A second `python -m bot` logs
+  "Another copy of the bot is already running" in `bot.log` and stops.
 - Workday's list endpoint only returns relative dates ("Posted 30+ Days Ago"). The exact date is read from the job detail, and older ones stay *unknown*.
 - vanshb03 links are `go.vansh.nyc` short links. The bot resolves them so it can de-duplicate. If that fails, it falls back to company+title matching.
 - Postings with no location at all are kept with a lower score instead of being dropped, so expect the occasional US-only role marked *Location unknown*.

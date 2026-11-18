@@ -39,9 +39,12 @@ class FetchContext:
 class Source(abc.ABC):
     kind: str = "base"
     priority: int = 50  # lower = processed first when de-duplicating (direct ATS before aggregators)
+    min_interval_minutes: int = 0  # check at most this often (0 = every scan)
 
     def __init__(self, name: str, company: str | None = None, enabled: bool = True,
-                 assume_country: str | None = None, **options) -> None:
+                 assume_country: str | None = None, min_interval_minutes: int | None = None, **options) -> None:
+        if min_interval_minutes is not None:
+            self.min_interval_minutes = int(min_interval_minutes)
         if not name:
             raise ValueError(f"{self.kind} source requires a name/board identifier")
         self.name = name

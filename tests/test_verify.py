@@ -96,7 +96,7 @@ async def test_rate_limit_or_unsupported_site_leaves_it_possibly_closed(db, rout
     router.add("GET", WD_API, httpx.Response(429))
     router.add("GET", r"careers\.amd\.com", httpx.Response(200, text="<html>job page</html>"))
     stats = await LinkChecker(db, make_http(router, max_retries=0)).run(NOW)
-    assert stats["unknown"] == 2 and db.verified_closed_ids() == set()
+    assert (stats["unknown"], stats["retry"]) == (1, 1) and db.verified_closed_ids() == set()
     assert {a, b} <= db.stale_job_ids(NOW)
 
 
@@ -189,7 +189,7 @@ async def test_server_errors_are_unknown_not_closed(db, router, status):
     stale_job(db)
     router.add("GET", WD_API, httpx.Response(status))
     stats = await LinkChecker(db, make_http(router, max_retries=0)).run(NOW)
-    assert stats["unknown"] == 1 and db.verified_closed_ids() == set()
+    assert stats["retry"] == 1 and db.verified_closed_ids() == set()
 
 
 async def test_rate_limited_lookups_are_retried_next_scan_but_unsupported_sites_wait(db, router):

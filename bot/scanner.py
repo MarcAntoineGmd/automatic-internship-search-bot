@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Awaitable, Callable
 
 from .classify import classify
@@ -53,12 +54,14 @@ class ScanReport:
     def new_jobs(self) -> int:
         return len(self.new_job_ids)
 
+    sources_skipped: int = 0  # checked recently (e.g. Workday: every 2 h)
     link_check: dict = field(default_factory=dict)
 
     def summary(self) -> str:
         if self.skipped:
             return "Scan skipped: another scan is already running."
-        text = (f"Sources OK {self.sources_ok}, failed {self.sources_failed} | fetched {self.jobs_fetched} | "
+        skipped = f", not due {self.sources_skipped}" if self.sources_skipped else ""
+        text = (f"Sources OK {self.sources_ok}, failed {self.sources_failed}{skipped} | fetched {self.jobs_fetched} | "
                 f"qualifying new {self.new_jobs} (initial import {len(self.baseline_job_ids)}) | "
                 f"duplicates {self.duplicates} | DMs sent {self.notifications_sent}")
         if self.link_check.get("checked"):
@@ -131,7 +134,16 @@ class Scanner:
         baseline_sources = {src.id for src in self.sources if not self.db.has_successful_check(src.id)}
         ctx = FetchContext(is_known=self.db.is_known_uid, max_details=s.max_detail_requests_per_source)
         sem = asyncio.Semaphore(s.source_concurrency)
-        results = await asyncio.gather(*(self._fetch_one(src, ctx, sem) for src in self.sources))
+        if hasattr(self.http, "load_rate_limit_state"):
+            self.http.load_rate_limit_state(json.loads(self.db.get_meta("rate_limits") or "{}"))
+        last_ok = self.db.last_ok_checks()
+        due = [src for src in self.sources
+               if not (src.min_interval_minutes and last_ok.get(src.id)
+                       and report.started_at - last_ok[src.id] < timedelta(minutes=src.min_interval_minutes))]
+        report.sources_skipped = len(self.sources) - len(due)
+        results = await asyncio.gather(*(self._fetch_one(src, ctx, sem) for src in due))
+        if hasattr(self.http, "rate_limit_state"):
+            self.db.set_meta("rate_limits", json.dumps(self.http.rate_limit_state()))
 
         baseline_candidates: list[tuple[int, int]] = []  # (score, job_id)
         now = self.now()

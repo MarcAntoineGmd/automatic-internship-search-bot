@@ -536,6 +536,10 @@ class Database:
                    (scan_id, source, _iso(started_at), duration_ms, int(ok), jobs_fetched, new_jobs,
                     (error or "")[:500] or None))
 
+    def last_ok_checks(self) -> dict[str, datetime]:
+        return {r["source"]: parse_datetime(r["t"]) for r in self._exec(
+            "SELECT source, MAX(started_at) AS t FROM source_checks WHERE ok=1 GROUP BY source").fetchall()}
+
     def has_successful_check(self, source: str) -> bool:
         return self._one("SELECT 1 FROM source_checks WHERE source=? AND ok=1 LIMIT 1", (source,)) is not None
 

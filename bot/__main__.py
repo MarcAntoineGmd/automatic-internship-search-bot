@@ -10,11 +10,42 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import tempfile
 from pathlib import Path
 
 from .config import load_settings
+
+
+class _DropWindowsDisconnectNoise(logging.Filter):
+    """Windows' asyncio logs a scary but harmless traceback (WinError 10054) whenever a server closes a
+    keep-alive connection. Nothing is lost; keep it out of bot.log."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc = record.exc_info[1] if record.exc_info else None
+        return not (isinstance(exc, ConnectionResetError) and "_call_connection_lost" in record.getMessage())
+
+
+def acquire_single_instance_lock(path: Path):
+    """Return an open, locked file, or None if another copy of the bot already holds the lock.
+
+    Two copies would both scan (double load on the job sites) and both answer Discord commands."""
+    f = open(path, "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f  # keep it open (and locked) for the life of the process
 
 
 def _setup_logging(level: str, log_file: str | None = None) -> None:
@@ -30,6 +61,7 @@ def _setup_logging(level: str, log_file: str | None = None) -> None:
         except OSError as exc:
             print(f"Cannot write log file {log_file}: {exc}", file=sys.stderr or sys.stdout)
     logging.basicConfig(level=getattr(logging, level, logging.INFO), format=fmt, handlers=handlers or None, force=True)
+    logging.getLogger("asyncio").addFilter(_DropWindowsDisconnectNoise())
 
     def _log_crash(exc_type, exc, tb):
         logging.getLogger("bot").critical("Unhandled error, the bot stopped", exc_info=(exc_type, exc, tb))
@@ -136,6 +168,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     from .discord_app import RadarBot
 
+    db_path = Path(settings.database_path)
+    lock = acquire_single_instance_lock(db_path.with_name(db_path.name + ".lock"))
+    if lock is None:
+        logging.getLogger("bot").error(
+            "Another copy of the bot is already running, so this one stops. To restart it, stop the running copy "
+            "first (PowerShell: Get-Process python, pythonw | Stop-Process), then start it again.")
+        return 3
     bot = RadarBot(settings)
     logging.getLogger("bot").info("Starting the Discord bot (log file: %s)", settings.log_file or "off")
     bot.run(settings.discord_bot_token, log_handler=None)

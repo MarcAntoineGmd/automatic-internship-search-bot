@@ -15,15 +15,18 @@ RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 # Every Workday tenant (RBC, TD, NVIDIA, …) sits behind the same rate limit, so all of them share one gate:
 # (max requests in flight, min seconds between request starts). Without it, ~30 tenants at once get HTTP 429.
 HOST_LIMITS: dict[str, tuple[int, float]] = {"myworkdayjobs.com": (2, 0.6), "myworkdaysite.com": (2, 0.6)}
-# After a request to such a group still gets 429 once retries are used up, leave the group alone for a while
-# (the rest of the scan skips it) instead of every tenant hammering it and prolonging the block.
+# When such a group answers 429, leave it alone instead of every tenant hammering it and prolonging the block.
+# The pause grows each time it happens again (15 min, 1 h, 4 h, 16 h, then 24 h) and resets after a success.
+# The scanner saves this state in the database, so restarting the bot doesn't restart the hammering.
 RATE_LIMIT_COOLDOWN = 15 * 60.0
+RATE_LIMIT_MAX_COOLDOWN = 24 * 3600.0
 
 
 class _HostGate:
     def __init__(self, name: str, concurrency: int, interval: float) -> None:
         self.name = name
-        self.blocked_until = 0.0
+        self.blocked_until = 0.0  # wall-clock time (time.time()), so it can be saved and restored
+        self.strikes = 0
         self.sem = asyncio.Semaphore(concurrency)
         self.lock = asyncio.Lock()
         self.interval = interval
@@ -52,6 +55,18 @@ class HttpClient:
         self._sleep = sleep
         self._etag_cache: dict[str, tuple[str, Any]] = {}
         self._gates: dict[str, _HostGate] = {}
+
+    def rate_limit_state(self) -> dict[str, dict]:
+        return {k: {"blocked_until": g.blocked_until, "strikes": g.strikes}
+                for k, g in self._gates.items() if g.strikes or g.blocked_until > time.time()}
+
+    def load_rate_limit_state(self, state: dict[str, dict] | None) -> None:
+        for suffix, st in (state or {}).items():
+            if suffix in HOST_LIMITS:
+                conc, interval = HOST_LIMITS[suffix]
+                gate = self._gates.setdefault(suffix, _HostGate(suffix, conc, interval))
+                gate.blocked_until = max(gate.blocked_until, float(st.get("blocked_until") or 0))
+                gate.strikes = max(gate.strikes, int(st.get("strikes") or 0))
 
     def _gate(self, url: str) -> _HostGate | None:
         host = httpx.URL(url).host or ""
@@ -87,9 +102,10 @@ class HttpClient:
         last_exc: Exception | None = None
         gate = self._gate(url)
         for attempt in range(self.max_retries + 1):
-            if gate is not None and gate.blocked_until > time.monotonic():
-                mins = max(1, round((gate.blocked_until - time.monotonic()) / 60))
-                raise SourceFetchError(f"HTTP 429 (rate limited) from {gate.name}; skipped, retrying in ~{mins} min")
+            if gate is not None and gate.blocked_until > time.time():
+                mins = max(1, round((gate.blocked_until - time.time()) / 60))
+                wait = f"~{mins} min" if mins < 90 else f"~{round(mins / 60)} h"
+                raise SourceFetchError(f"HTTP 429 (rate limited) from {gate.name}; paused, next try in {wait}")
             try:
                 resp = await self._send(gate, method, url, **kwargs)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
@@ -100,6 +116,14 @@ class HttpClient:
                 log.debug("%s %s failed (%s); retrying in %.1fs", method, url, type(exc).__name__, delay)
                 await self._sleep(delay)
                 continue
+            if resp.status_code == 429 and gate is not None:  # shared limit: don't retry, back off for real
+                gate.strikes += 1
+                cooldown = min(RATE_LIMIT_MAX_COOLDOWN, RATE_LIMIT_COOLDOWN * 4 ** (gate.strikes - 1))
+                gate.blocked_until = time.time() + cooldown
+                log.warning("%s is rate-limiting the bot (HTTP 429); pausing it for %d min", gate.name, cooldown // 60)
+                return resp
+            if gate is not None and resp.status_code < 400:
+                gate.strikes = 0
             if resp.status_code in RETRY_STATUSES and attempt < self.max_retries:
                 retry_after = resp.headers.get("Retry-After")
                 delay = self._delay(attempt, retry_after)
@@ -110,10 +134,6 @@ class HttpClient:
                 log.debug("%s %s -> %s; retrying in %.1fs", method, url, resp.status_code, delay)
                 await self._sleep(delay)
                 continue
-            if resp.status_code == 429 and gate is not None:
-                gate.blocked_until = time.monotonic() + RATE_LIMIT_COOLDOWN
-                log.warning("%s is rate-limiting us (HTTP 429); pausing it for %d min", gate.name,
-                            RATE_LIMIT_COOLDOWN // 60)
             return resp
         kind = type(last_exc).__name__ if last_exc else "error"
         raise SourceFetchError(f"{kind} after {self.max_retries + 1} attempts: {url}") from last_exc
