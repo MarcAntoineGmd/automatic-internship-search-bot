@@ -47,6 +47,8 @@ class Settings:
     discord_guild_id: int | None = None
     discord_user_id: int | None = None
     notify_channel_id: int | None = None  # post in this channel instead of DMs
+    notify_channel_id_us: int | None = None  # US internships go here (or set it with /notify_here region:US)
+    include_us: bool = False  # collect US internships even without a US channel (shown in the HTML list)
     scan_interval_minutes: int = 30
     database_url: str = "sqlite:///./jobs.db"
     log_level: str = "INFO"
@@ -98,6 +100,7 @@ def load_settings(env: dict[str, str] | None = None, load_dotenv_file: bool = Tr
         min_score=_int(g("MIN_RELEVANCE_SCORE"), 40),
     )
     channel = g("NOTIFY_CHANNEL_ID")
+    channel_us = g("NOTIFY_CHANNEL_ID_US")
     guild = g("DISCORD_GUILD_ID")
     user = g("DISCORD_USER_ID")
     s = Settings(
@@ -105,6 +108,8 @@ def load_settings(env: dict[str, str] | None = None, load_dotenv_file: bool = Tr
         discord_guild_id=int(guild) if guild and guild.strip().isdigit() else None,
         discord_user_id=int(user) if user and user.strip().isdigit() else None,
         notify_channel_id=int(channel) if channel and channel.strip().isdigit() else None,
+        notify_channel_id_us=int(channel_us) if channel_us and channel_us.strip().isdigit() else None,
+        include_us=_bool(g("INCLUDE_US"), False),
         scan_interval_minutes=max(5, _int(g("SCAN_INTERVAL_MINUTES"), 30)),
         database_url=g("DATABASE_URL") or "sqlite:///./jobs.db",
         log_level=(g("LOG_LEVEL") or "INFO").upper(),

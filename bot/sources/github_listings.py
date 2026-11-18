@@ -48,12 +48,13 @@ class GitHubListingsSource(Source):
         self.default_year = kw.get("default_year") or (m.group(1) if m else None)
 
     @staticmethod
-    def _is_candidate(raw: dict) -> bool:
+    def _is_candidate(raw: dict, include_us: bool = False) -> bool:
         if not raw.get("active", True) or not raw.get("is_visible", True):
             return False
         locs = raw.get("locations") or []
         info = parse_location(locs)
-        return info.country == "Canada" or (info.country == "Unknown" and (info.remote or not locs))
+        return (info.country == "Canada" or (info.country == "Unknown" and (info.remote or not locs))
+                or (include_us and info.us))
 
     def parse_job(self, raw: dict, url: str | None = None) -> Job:
         terms = [t for t in (raw.get("terms") or []) if t and t != "N/A"]
@@ -98,7 +99,7 @@ class GitHubListingsSource(Source):
                 last_yield = time.perf_counter()
             if not isinstance(raw, dict) or not raw.get("id") or not raw.get("title"):
                 continue
-            if not self._is_candidate(raw):
+            if not self._is_candidate(raw, ctx.include_us):
                 continue
             uid = f"{self.id}:{raw['id']}"
             if self.resolve_redirects and not ctx.is_known(uid):

@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 
 from .classify import classify
@@ -88,6 +88,24 @@ class Scanner:
         self._lock = asyncio.Lock()
         self.last_report: ScanReport | None = None
 
+    def us_enabled(self) -> bool:
+        """US internships are collected when INCLUDE_US=true or a US channel is set (/notify_here region:US)."""
+        s = self.settings
+        return bool(s.include_us or s.notify_channel_id_us or self.db.get_meta("notify_channel_id_us"))
+
+    def _sync_us(self, now: datetime) -> tuple[bool, str]:
+        on = self.us_enabled()
+        self.settings.filters.include_us = on
+        since = self.db.get_meta("us_enabled_at")
+        if on and not since:
+            since = now.astimezone(timezone.utc).isoformat(timespec="seconds")
+            self.db.set_meta("us_enabled_at", since)
+            n = self.db.forget_rejections(("outside Canada", "requires US work authorization"))
+            log.info("US internships turned on: %d postings rejected as 'outside Canada' will be checked again", n)
+        elif not on and since:
+            self.db.set_meta("us_enabled_at", None)
+        return on, since or ""
+
     def source_ids(self) -> set[str]:
         return {src.id for src in self.sources}
 
@@ -132,7 +150,12 @@ class Scanner:
         self.db.sync_filter_signature(s.filters.signature())
         report.scan_id = self.db.start_scan(trigger, now=report.started_at)
         baseline_sources = {src.id for src in self.sources if not self.db.has_successful_check(src.id)}
-        ctx = FetchContext(is_known=self.db.is_known_uid, max_details=s.max_detail_requests_per_source)
+        us_on, us_since = self._sync_us(report.started_at)
+        # The first time each source is checked after US was turned on, its US postings are an initial import.
+        us_baseline = ({src.id for src in self.sources if not self.db.has_successful_check_since(src.id, us_since)}
+                       if us_on else set())
+        ctx = FetchContext(is_known=self.db.is_known_uid, max_details=s.max_detail_requests_per_source,
+                           include_us=us_on)
         sem = asyncio.Semaphore(s.source_concurrency)
         if hasattr(self.http, "load_rate_limit_state"):
             self.http.load_rate_limit_state(json.loads(self.db.get_meta("rate_limits") or "{}"))
@@ -145,7 +168,7 @@ class Scanner:
         if hasattr(self.http, "rate_limit_state"):
             self.db.set_meta("rate_limits", json.dumps(self.http.rate_limit_state()))
 
-        baseline_candidates: list[tuple[int, int]] = []  # (score, job_id)
+        baseline_candidates: list[tuple[int, int, str]] = []  # (score, job_id, region)
         now = self.now()
         pending: list[tuple[SourceResult, Job]] = []
         for res in sorted(results, key=lambda r: (r.source.priority, r.source.id)):
@@ -167,7 +190,7 @@ class Scanner:
                     i += 1
                     try:
                         outcome = self._process(job, now, res.source.id in baseline_sources,
-                                                baseline_candidates, report)
+                                                baseline_candidates, report, res.source.id in us_baseline)
                     except Exception:  # one malformed job must not kill the scan
                         log.exception("Failed to process job %s", job.uid)
                         continue
@@ -181,11 +204,15 @@ class Scanner:
 
         # Initial import of a source: keep only the best few as notifications, store the rest silently.
         if baseline_candidates:
+            # keep the best BASELINE_NOTIFY_LIMIT of each region as notifications, store the rest silently
             baseline_candidates.sort(reverse=True)
+            kept: dict[str, int] = {}
             with self.db.transaction():
-                for _, job_id in baseline_candidates[s.baseline_notify_limit:]:
-                    self.db.mark_notified(job_id, status="baseline", now=now)
-                    report.baseline_job_ids.append(job_id)
+                for _, job_id, region in baseline_candidates:
+                    kept[region] = kept.get(region, 0) + 1
+                    if kept[region] > s.baseline_notify_limit:
+                        self.db.mark_notified(job_id, status="baseline", now=now)
+                        report.baseline_job_ids.append(job_id)
 
         # Postings no source lists anymore: look them up on the company's own job board.
         if self.link_checker is not None:
@@ -220,7 +247,8 @@ class Scanner:
         return report
 
     def _process(self, job: Job, now: datetime, from_baseline_source: bool,
-                 baseline_candidates: list[tuple[int, int]], report: ScanReport) -> str:
+                 baseline_candidates: list[tuple[int, int, str]], report: ScanReport,
+                 us_baseline_source: bool = False) -> str:
         if not job.title or not job.url:
             return "invalid"
         if self.db.is_rejected(job.uid):
@@ -240,7 +268,7 @@ class Scanner:
             if job.details_fetched or job.description:
                 self.db.add_rejected(job.uid, cls.exclusion_reason, now=now)
             return "rejected"
-        dup = self.db.find_duplicate(job, term=cls.term, provinces=cls.provinces)
+        dup = self.db.find_duplicate(job, term=cls.term, provinces=cls.provinces, country=cls.country)
         if dup is not None:
             self.db.touch(dup, job, now=now)
             report.duplicates += 1
@@ -249,6 +277,6 @@ class Scanner:
         job_id = self.db.insert_job(job, cls, now=now, notify_status=status)
         report.qualified += 1
         report.new_job_ids.append(job_id)
-        if from_baseline_source and status is None:
-            baseline_candidates.append((cls.score, job_id))
+        if status is None and (from_baseline_source or (cls.region == "US" and us_baseline_source)):
+            baseline_candidates.append((cls.score, job_id, cls.region))
         return "new"

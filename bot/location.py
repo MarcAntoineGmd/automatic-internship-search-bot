@@ -117,6 +117,7 @@ class LocationInfo:
     remote: bool = False
     remote_scope: str | None = None  # canada | north_america | global | us | foreign | None
     workplace: str | None = None
+    us: bool = False  # at least one location is in the United States
 
     @property
     def is_canada(self) -> bool:
@@ -222,7 +223,7 @@ def parse_location(
 
     provinces: list[str] = []
     cities: list[str] = []
-    any_canada = any_foreign = any_remote = any_na = any_global = False
+    any_canada = any_foreign = any_remote = any_na = any_global = any_us = False
     unknown_segments = 0
     for s in segs:
         provinces.extend(s.provinces)
@@ -232,6 +233,7 @@ def parse_location(
         any_remote |= s.remote
         any_na |= s.north_america
         any_global |= s.global_remote
+        any_us |= s.us
         if not (s.canada or s.foreign or s.north_america or s.global_remote):
             unknown_segments += 1
 
@@ -241,10 +243,13 @@ def parse_location(
             any_canada = True
         elif fc:
             any_foreign = True
+            if fc in ("us", "usa", "united states", "united states of america", "u.s.", "u.s.a."):
+                any_us = True
 
     info.provinces = _order_provinces(list(dict.fromkeys(provinces)), province_priority)
     info.cities = list(dict.fromkeys(cities))
     info.remote = any_remote or (workplace or "").lower() == "remote"
+    info.us = any_us and not any_canada
 
     if any_canada:
         info.country = "Canada"

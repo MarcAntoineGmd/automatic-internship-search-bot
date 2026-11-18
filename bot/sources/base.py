@@ -34,6 +34,7 @@ class FetchContext:
     is_known: Callable[[str], bool] = lambda uid: False
     max_details: int = 40
     notes: list[str] = field(default_factory=list)
+    include_us: bool = False  # also keep US postings (US channel enabled)
 
 
 class Source(abc.ABC):

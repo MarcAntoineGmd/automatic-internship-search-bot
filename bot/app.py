@@ -17,8 +17,8 @@ log = logging.getLogger(__name__)
 HELP_TEXT = """**Canadian SWE Internship Radar**
 `/subscribe` — register for DMs (first user becomes the owner if DISCORD_USER_ID is unset)
 `/unsubscribe` — stop DMs
-`/notify_here` — post new internships in the current server channel instead of DMs
-`/notify_dm` — go back to DMs
+`/notify_here [region]` — post new internships in this channel (region: Canada, or United States for a US channel)
+`/notify_dm [region]` — Canada: go back to DMs · United States: stop posting US internships
 `/status` — subscription, counts, last/next scan, source errors
 `/scan` — run a scan now
 `/latest [count] [page]` — most recently discovered matching jobs, page by page (anyone)
@@ -96,18 +96,31 @@ class RadarApp:
             return CommandResult(True, "🔕 Unsubscribed. Scans keep running; use /subscribe to resume DMs.")
         return CommandResult(True, "You were not subscribed.")
 
-    def set_notify_channel(self, user_id: int | str, channel_id: int | str | None) -> CommandResult:
-        """channel_id=None switches back to DMs."""
+    def set_notify_channel(self, user_id: int | str, channel_id: int | str | None, region: str = "CA") -> CommandResult:
+        """region "CA": channel_id=None switches back to DMs. region "US": channel_id=None turns US posts off."""
         if not self.is_owner(user_id):
             return CommandResult(False, "Only the owner can manage this bot.")
+        if region == "US":
+            first = not self.scanner.us_enabled()
+            self.db.set_meta("notify_channel_id_us", str(channel_id) if channel_id else "")
+            if not channel_id:
+                return CommandResult(True, "🇺🇸 US internships will no longer be posted (or collected).")
+            # US postings collected before this channel existed are not posted all at once.
+            self.db.mark_pending_as("baseline", "US")
+            extra = (" The bot starts collecting US postings on the next scan: existing ones are stored silently "
+                     f"except the top {self.settings.baseline_notify_limit} per source check, then only new ones "
+                     "are posted.") if first else ""
+            return CommandResult(True, f"🇺🇸 US internships will now be posted in <#{channel_id}>.{extra}")
         self.db.set_meta("notify_channel_id", str(channel_id) if channel_id else "")
         if channel_id:
-            return CommandResult(True, f"📢 New internships will now be posted in <#{channel_id}>.")
-        return CommandResult(True, "📬 New internships will now be sent to your DMs (run /subscribe if needed).")
+            return CommandResult(True, f"🇨🇦 Canadian internships will now be posted in <#{channel_id}>.")
+        return CommandResult(True, "📬 Canadian internships will now be sent to your DMs (run /subscribe if needed).")
 
-    def notify_target_label(self) -> str:
-        channel = self.notifier.channel_id() if self.notifier else None
-        return f"<#{channel}>" if channel else "Your DMs"
+    def notify_target_label(self, region: str = "CA") -> str:
+        channel = self.notifier.channel_id(region) if self.notifier else None
+        if channel:
+            return f"<#{channel}>"
+        return "Your DMs" if region == "CA" else "Off (use /notify_here region:US)"
 
     def mark_applied(self, user_id: int | str, job_id: int, status: str = "applied") -> CommandResult:
         if not self.is_owner(user_id):
@@ -130,6 +143,7 @@ class RadarApp:
         return {
             "subscribed": self.db.is_subscribed(user_id),
         "notify_target": self.notify_target_label(),
+        "notify_target_us": self.notify_target_label("US"),
             "jobs": self.db.count_jobs(),
             "notified": self.db.count_notified(),
             "pending": self.db.count_pending(self.settings.notify_min_score),

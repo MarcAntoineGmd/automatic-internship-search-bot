@@ -16,7 +16,8 @@ class Classification:
     reasons: list[str] = field(default_factory=list)
     exclusion_reason: str | None = None
     # Derived/normalized fields
-    country: str = "Unknown"  # "Canada" | "Foreign" | "Unknown"
+    country: str = "Unknown"  # "Canada" | "United States" | "Foreign" | "Unknown"
+    region: str = "CA"  # notification channel: "CA" (Canada, incl. unknown/remote) or "US"
     province: str | None = None
     provinces: list[str] = field(default_factory=list)
     city: str | None = None

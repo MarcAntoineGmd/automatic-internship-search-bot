@@ -62,10 +62,11 @@ class EightfoldSource(Source):
 
     async def fetch(self, http: HttpClient, ctx: FetchContext) -> list[Job]:
         positions: dict[str, dict] = {}
-        for query in self.queries:
+        locations = [self.location] + (["United States"] if ctx.include_us and self.location == "Canada" else [])
+        for query, location in ((q, l) for l in locations for q in self.queries):
             start = 0
             for _ in range(self.max_pages):
-                params = {"domain": self.domain, "query": query, "location": self.location, "start": start}
+                params = {"domain": self.domain, "query": query, "location": location, "start": start}
                 data = await http.get_json(f"{self.base}/search", params=params)
                 body = data.get("data") if isinstance(data, dict) else None
                 if not isinstance(body, dict) or "positions" not in body:

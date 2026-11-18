@@ -25,7 +25,9 @@ def province_tags(provinces: list[str], country: str | None, workplace: str | No
         emoji, label, _ = PROVINCE_STYLE.get(p, OTHER_PROVINCE)
         tags.append(f"{emoji} {label or p}")
     if not tags:
-        if country == "Canada":
+        if country == "United States":
+            tags.append("🇺🇸 US (remote)" if workplace == "remote" else "🇺🇸 US")
+        elif country == "Canada":
             tags.append("🌐 Canada (télétravail)" if workplace == "remote" else "🍁 Canada")
         else:
             tags.append("❔ Lieu non précisé")
@@ -54,7 +56,12 @@ def tag_line(provinces: list[str], country: str | None, term: str | None, workpl
     return " · ".join(province_tags(provinces, country, workplace) + [season_tag(term)])
 
 
+US_COLOR = 0x8250DF  # purple, so US posts stand out from QC blue / ON red
+
+
 def province_color(provinces: list[str], country: str | None) -> int:
+    if country == "United States":
+        return US_COLOR
     if provinces:
         return PROVINCE_STYLE.get(provinces[0], OTHER_PROVINCE)[2]
     return 0x8C959F

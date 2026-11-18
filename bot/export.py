@@ -40,7 +40,8 @@ def _row(j: JobRow, tz: str, include_status: bool = True, sectors: list[str] | N
     sectors = sectors if sectors is not None else sectors_for(j.title, j.description, j.company)
     row = [str(j.id), str(j.score), j.priority, j.company, j.title,
            ", ".join(sector_label(k, emoji=False) for k in sectors), j.location or "",
-            ", ".join(PROVINCE_NAMES.get(p, p) for p in j.provinces) or ("Canada" if j.country == "Canada" else ""),
+            ", ".join(PROVINCE_NAMES.get(p, p) for p in j.provinces) or (
+                j.country if j.country in ("Canada", "United States") else ""),
             j.term or "", kind, WORKPLACE_LABEL.get(j.workplace or "", ""), _date(j.date_posted, tz),
             _date(j.date_discovered, tz), j.application_status, ", ".join([j.source] + j.also_seen_on), j.url or ""]
     return row if include_status else [c for i, c in enumerate(row) if i != STATUS_COL]
@@ -81,7 +82,7 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
     body = []
     recent = now.astimezone(timezone.utc) - timedelta(hours=24)
     new_count = 0
-    counts: dict[str, dict[str, int]] = {"status": {}, "prov": {}, "term": {}, "sector": {}}
+    counts: dict[str, dict[str, int]] = {"status": {}, "country": {}, "prov": {}, "term": {}, "sector": {}}
     term_labels: dict[str, str] = {}
 
     def bump(group: str, key: str) -> None:
@@ -108,7 +109,9 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
                             if url else html.escape(cells[4]))
         cells[5] = " ".join(f"<span class='sector'>{html.escape(sector_label(k))}</span>" for k in sectors)
         provs = [p for p in j.provinces if p]
-        prov_keys = [p for p in provs if p in ("QC", "ON")] or ["OTHER"]
+        region = j.region
+        bump("country", region)
+        prov_keys = ["US"] if region == "US" else ([p for p in provs if p in ("QC", "ON")] or ["OTHER"])
         for k in prov_keys:
             bump("prov", k)
         term = _term_key(j.term)
@@ -119,11 +122,12 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
         season = season_of(j.term) or "NONE"
         cells[7] = " ".join(
             f"<span class='prov p-{html.escape(p)}'>{PROVINCE_STYLE.get(p, ('⚪', p, 0))[0]} {html.escape(p)}</span>"
-            for p in provs[:3]) or html.escape(cells[7] or "—")
+            for p in provs[:3]) or ("<span class='prov p-US'>🇺🇸 US</span>" if region == "US"
+                                    else html.escape(cells[7] or "—"))
         cells[8] = f"<span class='season s-{season}'>{html.escape(season_tag(j.term))}</span>"
         tds = "".join(f"<td>{c}</td>" if i in (4, 5, 7, 8) else f"<td>{html.escape(c)}</td>" for i, c in enumerate(cells))
         body.append(f"<tr class='{html.escape(j.priority.lower())}{' stale' if stale else ''}' "
-                    f"data-status='{status}' data-prov='{' '.join(prov_keys)}' "
+                    f"data-status='{status}' data-country='{region}' data-prov='{' '.join(prov_keys)}' "
                     f"data-term='{html.escape(term, quote=True)}' data-sector='{' '.join(sectors)}'>{tds}</tr>")
 
     def chip(group: str, value: str, label: str, n: int | None = None) -> str:
@@ -140,7 +144,10 @@ def to_html(jobs: list[JobRow], tz: str = "America/Toronto", now: datetime | Non
     chips = (
         row("status", "Statut", "Tous", [("open", "✅ Ouverts"), ("stale", "⚠️ Peut-être fermés"),
                                           ("closed", "❌ Fermés (vérifiés)")])
-        + row("prov", "Province", "Toutes", [("QC", "🔵 Québec"), ("ON", "🔴 Ontario"), ("OTHER", "⚪ Ailleurs")])
+        + (row("country", "Pays", "Tous", [("CA", "🇨🇦 Canada"), ("US", "🇺🇸 États-Unis")])
+           if counts["country"].get("US") else "")
+        + row("prov", "Province", "Toutes", [("QC", "🔵 Québec"), ("ON", "🔴 Ontario"),
+                                             ("OTHER", "⚪ Ailleurs au Canada")])
         + row("term", "Session", "Toutes", [(t, term_labels[t]) for t in terms])
         + row("sector", "Secteur", "Tous", [(k, sector_label(k)) for k in SECTORS if counts["sector"].get(k)])
     )
@@ -165,7 +172,7 @@ tr.stale td{{opacity:.6}} tr.stale a{{text-decoration:line-through}}
 .prov,.season,.sector{{display:inline-block;border-radius:10px;padding:1px 7px;font-size:12px;white-space:nowrap;margin:0 2px 2px 0;
 background:#eaeef2;color:#1f2328}}
 .sector{{background:#f3eefc;color:#5a32a3}}
-.p-QC{{background:#ddf4ff;color:#0550ae}} .p-ON{{background:#ffebe9;color:#a40e26}}
+.p-QC{{background:#ddf4ff;color:#0550ae}} .p-ON{{background:#ffebe9;color:#a40e26}} .p-US{{background:#fbefff;color:#6e40c9}}
 .s-Winter{{background:#ddf4ff;color:#0550ae}} .s-Summer{{background:#fff8c5;color:#7d4e00}}
 .s-Fall{{background:#fff1e5;color:#953800}} .s-Spring{{background:#dafbe1;color:#116329}}
 .chips{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}} .chips span{{color:#57606a;font-size:13px;min-width:70px}}
@@ -185,7 +192,7 @@ th,td{{border-color:#30363d}} a{{color:#4493f8}} input{{background:#0d1117;color
 <button class="reset" onclick="reset()">Réinitialiser les filtres</button><span id="shown"></span></div>
 <div class="wrap"><table id="t"><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>
 <script>
-const DEFAULT={{status:['open'],prov:[],term:[],sector:[]}};
+const DEFAULT={{status:['open'],country:[],prov:[],term:[],sector:[]}};
 const sel={{}};for(const g in DEFAULT)sel[g]=new Set(DEFAULT[g]);
 function load(){{const h=new URLSearchParams(location.hash.slice(1));
 for(const g in DEFAULT)if(h.has(g))sel[g]=new Set(h.get(g).split(',').filter(Boolean));

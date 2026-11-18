@@ -126,6 +126,13 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds") if dt else None
 
 
+def region_of(country: str | None) -> str:
+    return "US" if country == "United States" else "CA"
+
+
+US_SQL = "COALESCE(country,'') = 'United States'"
+
+
 @dataclass
 class JobRow:
     id: int
@@ -155,6 +162,11 @@ class JobRow:
     also_seen_on: list[str]
     notify_status: str | None
     application_status: str
+
+    @property
+    def region(self) -> str:
+        """Which channel the posting goes to: "US" for the United States, else "CA"."""
+        return region_of(self.country)
 
     @classmethod
     def from_row(cls, r: sqlite3.Row) -> "JobRow":
@@ -280,7 +292,7 @@ class Database:
         return self._one("SELECT 1 FROM rejected WHERE uid=?", (uid,)) is not None
 
     def find_duplicate(self, job: Job, term: str | None = None, provinces: list[str] | None = None,
-                       use_fingerprint: bool = True) -> int | None:
+                       use_fingerprint: bool = True, country: str | None = None) -> int | None:
         keys = self.keys_for(job)
         q = ",".join("?" * len(keys))
         row = self._one(f"SELECT job_id FROM job_keys WHERE key IN ({q}) LIMIT 1", keys)
@@ -291,8 +303,10 @@ class Database:
         fp = fingerprint_base(job.company, job.title)
         if fp.endswith("|") or fp.startswith("|"):
             return None
-        for r in self._exec("SELECT id, term, provinces FROM jobs WHERE fp_base=?", (fp,)).fetchall():
+        for r in self._exec("SELECT id, term, provinces, country FROM jobs WHERE fp_base=?", (fp,)).fetchall():
             other_provs = [p for p in (r["provinces"] or "").split(",") if p]
+            if country is not None and region_of(country) != region_of(r["country"]):
+                continue  # a US and a Canadian "Software Engineer Intern" at the same company are different jobs
             if terms_compatible(term, r["term"]) and provinces_compatible(provinces or [], other_provs):
                 return r["id"]
         return None
@@ -427,6 +441,27 @@ class Database:
             self._record_link(job_id, job, now)
             return job_id
 
+    def forget_rejections(self, reason_prefixes: tuple[str, ...]) -> int:
+        """Let postings rejected for these reasons be classified again (e.g. 'outside Canada' once US is on)."""
+        n = 0
+        for prefix in reason_prefixes:
+            n += self._exec("DELETE FROM rejected WHERE reason LIKE ?", (prefix + "%",)).rowcount
+        return n
+
+    def mark_pending_as(self, status: str, region: str, now: datetime | None = None) -> int:
+        where = US_SQL if region == "US" else f"NOT {US_SQL}"
+        return self._exec(f"UPDATE jobs SET notify_status=?, notified_at=? WHERE notify_status IS NULL AND {where}",
+                          (status, _iso(now or utcnow()))).rowcount
+
+    def regions_of(self, job_ids: list[int]) -> dict[int, str]:
+        out: dict[int, str] = {}
+        for i in range(0, len(job_ids), 500):
+            chunk = job_ids[i:i + 500]
+            q = ",".join("?" * len(chunk))
+            for r in self._exec(f"SELECT id, country FROM jobs WHERE id IN ({q})", chunk).fetchall():
+                out[r["id"]] = region_of(r["country"])
+        return out
+
     def add_rejected(self, uid: str, reason: str | None, now: datetime | None = None) -> None:
         now_s = _iso(now or utcnow())
         self._exec("""INSERT INTO rejected(uid, reason, first_seen, last_seen) VALUES(?,?,?,?)
@@ -435,10 +470,11 @@ class Database:
 
     # ------------------------------------------------------------------ notifications
     def pending_notifications(self, min_score: int, max_age_days: int, limit: int,
-                              now: datetime | None = None) -> list[JobRow]:
+                              now: datetime | None = None, region: str | None = None) -> list[JobRow]:
         cutoff = _iso((now or utcnow()) - timedelta(days=max_age_days))
+        where = "" if region is None else (f" AND {US_SQL}" if region == "US" else f" AND NOT {US_SQL}")
         rows = self._exec(
-            """SELECT * FROM jobs WHERE notify_status IS NULL AND score >= ? AND date_discovered >= ?
+            f"""SELECT * FROM jobs WHERE notify_status IS NULL AND score >= ? AND date_discovered >= ?{where}
                ORDER BY score DESC, id ASC LIMIT ?""", (min_score, cutoff, limit)).fetchall()
         return [JobRow.from_row(r) for r in rows]
 
@@ -463,10 +499,13 @@ class Database:
 
     @staticmethod
     def _filters(province: str | None, season: str | None) -> tuple[str, list]:
-        """province: 'QC', 'ON', ... or 'OTHER' (neither QC nor ON); season: 'Winter' | 'Spring' | 'Summer' | 'Fall'."""
+        """province: 'QC', 'ON', ..., 'OTHER' (Canada outside QC/ON) or 'US'; season: 'Winter' | … | 'Fall'."""
         sql, params = "", []
-        if province == "OTHER":
-            sql += " AND COALESCE(provinces,'') NOT LIKE '%QC%' AND COALESCE(provinces,'') NOT LIKE '%ON%'"
+        if province == "US":
+            sql += f" AND {US_SQL}"
+        elif province == "OTHER":
+            sql += (" AND COALESCE(provinces,'') NOT LIKE '%QC%' AND COALESCE(provinces,'') NOT LIKE '%ON%'"
+                    f" AND NOT {US_SQL}")
         elif province:
             sql += " AND (',' || COALESCE(provinces,'') || ',') LIKE ?"
             params.append(f"%,{province},%")
@@ -539,6 +578,10 @@ class Database:
     def last_ok_checks(self) -> dict[str, datetime]:
         return {r["source"]: parse_datetime(r["t"]) for r in self._exec(
             "SELECT source, MAX(started_at) AS t FROM source_checks WHERE ok=1 GROUP BY source").fetchall()}
+
+    def has_successful_check_since(self, source: str, since: str) -> bool:
+        return self._one("SELECT 1 FROM source_checks WHERE source=? AND ok=1 AND started_at >= ? LIMIT 1",
+                         (source, since)) is not None
 
     def has_successful_check(self, source: str) -> bool:
         return self._one("SELECT 1 FROM source_checks WHERE source=? AND ok=1 LIMIT 1", (source,)) is not None

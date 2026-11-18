@@ -121,54 +121,62 @@ class Notifier:
         self.send = send
         self.pause = pause
 
-    def channel_id(self) -> str | None:
-        """Notification channel: set with /notify_here (stored in DB), else NOTIFY_CHANNEL_ID, else None (DMs)."""
-        stored = self.db.get_meta("notify_channel_id")
+    def channel_id(self, region: str = "CA") -> str | None:
+        """Canada: /notify_here channel (stored in DB), else NOTIFY_CHANNEL_ID, else None (DMs).
+        US: /notify_here region:US channel, else NOTIFY_CHANNEL_ID_US, else None (US postings aren't posted)."""
+        key, env = ("notify_channel_id_us", self.settings.notify_channel_id_us) if region == "US" else (
+            "notify_channel_id", self.settings.notify_channel_id)
+        stored = self.db.get_meta(key)
         if stored is not None:
-            return stored or None  # "" = explicitly switched back to DMs with /notify_dm
-        return str(self.settings.notify_channel_id) if self.settings.notify_channel_id else None
+            return stored or None  # "" = explicitly switched off (/notify_dm)
+        return str(env) if env else None
 
-    def targets(self) -> list[str]:
-        channel = self.channel_id()
+    def targets(self, region: str = "CA") -> list[str]:
+        channel = self.channel_id(region)
         if channel:
             return [f"{CHANNEL_PREFIX}{channel}"]
-        return self.db.active_subscribers()
+        return self.db.active_subscribers() if region == "CA" else []
 
     async def deliver_pending(self, report=None) -> int:
-        subscribers = self.targets()
-        if not subscribers:
-            return 0
-        jobs = self.db.pending_notifications(
-            min_score=self.settings.notify_min_score,
-            max_age_days=self.settings.pending_max_age_days,
-            limit=self.settings.max_dms_per_scan,
-            now=getattr(report, "started_at", None),  # the scan's clock (tests run it at a fixed time)
-        )
         sent = 0
-        if report is not None and getattr(report, "baseline_job_ids", None):
-            n = len(report.baseline_job_ids)
-            try:
-                for uid in subscribers:
-                    await self.send(uid, {"content": (
-                        f"📥 Initial import: {n} existing matching postings were stored without individual notifications "
-                        f"(the top {self.settings.baseline_notify_limit} by score follow). Use /latest to browse them.")})
-            except Exception as exc:
-                log.warning("Could not send baseline summary: %s", exc)
-        for job in jobs:
-            embed = build_job_embed(job, self.settings.timezone)
-            delivered = True
-            for uid in subscribers:
+        baseline = self.db.regions_of(list(getattr(report, "baseline_job_ids", None) or []))
+        for region in ("CA", "US"):
+            targets = self.targets(region)
+            if not targets:
+                continue
+            n = sum(1 for r in baseline.values() if r == region)
+            if n:
+                where = " in the United States" if region == "US" else ""
                 try:
-                    await self.send(uid, {"content": notification_text(job), "embed": embed})
+                    for uid in targets:
+                        await self.send(uid, {"content": (
+                            f"📥 Initial import: {n} existing matching postings{where} were stored without individual "
+                            f"notifications (the top {self.settings.baseline_notify_limit} by score follow). "
+                            "Use /latest or /export to browse them.")})
                 except Exception as exc:
-                    delivered = False
-                    log.warning("Notification to %s failed for job %s: %s", uid, job.id, exc)
-            if not delivered:
-                break  # keep it pending; retry on the next scan
-            self.db.mark_notified(job.id, "sent")
-            sent += 1
-            if self.pause:
-                await asyncio.sleep(self.pause)
+                    log.warning("Could not send baseline summary: %s", exc)
+            jobs = self.db.pending_notifications(
+                min_score=self.settings.notify_min_score,
+                max_age_days=self.settings.pending_max_age_days,
+                limit=self.settings.max_dms_per_scan,  # per channel
+                now=getattr(report, "started_at", None),  # the scan's clock (tests run it at a fixed time)
+                region=region,
+            )
+            for job in jobs:
+                embed = build_job_embed(job, self.settings.timezone)
+                delivered = True
+                for uid in targets:
+                    try:
+                        await self.send(uid, {"content": notification_text(job), "embed": embed})
+                    except Exception as exc:
+                        delivered = False
+                        log.warning("Notification to %s failed for job %s: %s", uid, job.id, exc)
+                if not delivered:
+                    break  # keep it pending; retry on the next scan
+                self.db.mark_notified(job.id, "sent")
+                sent += 1
+                if self.pause:
+                    await asyncio.sleep(self.pause)
         return sent
 
     async def send_daily_summary(self, now: datetime | None = None) -> bool:
@@ -185,9 +193,9 @@ class Notifier:
             await self.send(uid, {"embed": embed})
         return True
 
-    async def send_test(self, user_id: str) -> str:
+    async def send_test(self, user_id: str, region: str = "CA") -> str:
         """Send a test message where notifications go. Returns the target used."""
-        channel = self.channel_id()
+        channel = self.channel_id(region)
         target = f"{CHANNEL_PREFIX}{channel}" if channel else str(user_id)
         embed = discord.Embed(
             title="✅ Test notification",

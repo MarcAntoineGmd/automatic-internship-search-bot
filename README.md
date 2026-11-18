@@ -57,8 +57,8 @@ Bots can't start a DM with a stranger, so you add the bot to a small server you 
 |---|---|---|
 | `/subscribe` | owner | Register for DMs. Any matches already waiting are sent right away. |
 | `/unsubscribe` | owner | Stop DMs. Scans keep running. |
-| `/notify_here` | owner | Post new internships in the current server channel instead of DMs |
-| `/notify_dm` | owner | Go back to DMs |
+| `/notify_here [region]` | owner | Post new internships in this channel. `region:United States` makes it the US channel |
+| `/notify_dm [region]` | owner | Canada: back to DMs. United States: stop US posts |
 | `/status` | owner | Subscription, jobs stored, DMs sent, pending, active sources, last successful scan, next scan, source errors |
 | `/scan` | owner | Run a scan now. It is refused if one is already running. |
 | `/latest [count] [page] [province] [session]` | anyone | Most recent matches, 25 per page max. Filter with `province:` 🔵 Québec / 🔴 Ontario / ⚪ ailleurs and `session:` ❄️ hiver / ☀️ été / 🍂 automne |
@@ -72,6 +72,18 @@ Run **`/notify_here`** in the channel you want, for example `#internships`. The 
 From then on every new match is posted in that channel, and DMs stop. **`/notify_dm`** switches back.
 You can also set `NOTIFY_CHANNEL_ID` in `.env` (right-click the channel → **Copy Channel ID**). If you've used `/notify_here` or `/notify_dm`, the command's choice wins over `.env`.
 Jobs already notified are never re-posted when you switch.
+
+### A Canada channel and a US channel
+One bot can post Canadian and US internships in two different channels:
+1. In the Canada channel run `/notify_here` (or `/notify_here region:Canada`).
+2. In the US channel run `/notify_here region:United States`. From the next scan, the bot also collects US internships
+   (trackers, Greenhouse/Lever/Ashby/Workday boards, SmartRecruiters and Eightfold searches). The US postings that
+   already exist are an *initial import*: the best 10 per source are posted, the rest are stored silently (see `/export`).
+3. `/status` shows where each region goes. `/notify_dm region:United States` turns US posts (and collection) off again.
+
+A posting with at least one Canadian location goes to the Canada channel. US postings that require US work
+authorization are kept and say so under *Eligibility*. Set `INCLUDE_US=true` to collect US internships for the HTML list
+without posting them. The HTML list gets a *Pays* filter, and `/latest` a `🇺🇸 États-Unis` choice.
 
 ### Telling Québec, Ontario and terms apart
 Every post starts with tags, e.g. **🔵 QC · ☀️ Été 2027 | Software Developer Intern**, and the embed colour matches the province: blue for Québec, red for Ontario, green for BC, yellow for Alberta.
@@ -173,6 +185,8 @@ All settings are listed in `.env.example`. The main ones:
 |---|---|---|
 | `DISCORD_BOT_TOKEN` / `DISCORD_GUILD_ID` / `DISCORD_USER_ID` | – | See section 2 |
 | `NOTIFY_CHANNEL_ID` | – | Optional. Post in this channel instead of DMs (or use `/notify_here`). |
+| `NOTIFY_CHANNEL_ID_US` | – | Optional. Post US internships in this channel (or use `/notify_here region:United States`). |
+| `INCLUDE_US` | false | Collect US internships even without a US channel (HTML list / `/export` only) |
 | `SCAN_INTERVAL_MINUTES` | 30 | Minutes between scans (minimum 5) |
 | `DATABASE_URL` | `sqlite:///./jobs.db` | SQLite file. Use `sqlite:////data/jobs.db` in Docker. |
 | `TARGET_PROVINCES` / `TARGET_CITIES` / `TARGET_TERMS` | QC,ON / … / Summer 2027,Fall 2027,Winter 2027 | Priorities, in order |

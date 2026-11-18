@@ -279,6 +279,9 @@ class FilterConfig:
     include_new_grad: bool = False
     allow_unpaid: bool = False
     include_unknown_location: bool = True
+    # Keep US internships too (their own channel). Not part of signature(): turning it on only re-checks the
+    # postings that were rejected as "outside Canada" (see Scanner).
+    include_us: bool = False
     min_score: int = 40
 
     def signature(self) -> str:
@@ -442,6 +445,10 @@ def classify(job: Job, cfg: FilterConfig, now: datetime | None = None) -> Classi
         else:
             loc_points = 12
             reasons.append("Canada (province unknown)")
+    elif loc.country == "Foreign" and loc.us and cfg.include_us:
+        loc.country = "United States"
+        loc_points = 12
+        reasons.append("United States")
     elif loc.country == "Foreign":
         excluded = excluded or "outside Canada"
     else:
@@ -500,7 +507,9 @@ def classify(job: Job, cfg: FilterConfig, now: datetime | None = None) -> Classi
     penalty = 0
     if "Open to currently enrolled students" in elig:
         student_bonus = 4
-    if "Requires US work authorization" in elig and loc.country != "Canada":
+    if "Requires US work authorization" in elig and loc.country == "United States":
+        penalty += 5  # kept for the US channel, shown under Eligibility
+    elif "Requires US work authorization" in elig and loc.country != "Canada":
         excluded = excluded or "requires US work authorization"
     elif "Requires US work authorization" in elig:
         penalty += 10
@@ -529,6 +538,7 @@ def classify(job: Job, cfg: FilterConfig, now: datetime | None = None) -> Classi
         reasons=reasons,
         exclusion_reason=excluded,
         country=loc.country,
+        region="US" if loc.country == "United States" else "CA",
         province=loc.provinces[0] if loc.provinces else None,
         provinces=loc.provinces,
         city=loc.cities[0] if loc.cities else None,

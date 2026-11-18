@@ -17,6 +17,8 @@ from .scheduler import DailySummaryScheduler, ScanScheduler
 
 log = logging.getLogger(__name__)
 
+REGION_CHOICES = [app_commands.Choice(name="🇨🇦 Canada", value="CA"),
+                  app_commands.Choice(name="🇺🇸 United States", value="US")]
 STATUS_CHOICES = [app_commands.Choice(name=s, value=s)
                   for s in ("applied", "interviewing", "offer", "rejected", "ignored", "new")]
 
@@ -115,7 +117,8 @@ class RadarBot(discord.Client):
             st = app.status(interaction.user.id, self.scheduler.next_run_at)
             embed = discord.Embed(title="Internship Radar status", color=0x3498DB)
             embed.add_field(name="Subscribed", value="Yes" if st["subscribed"] else "No")
-            embed.add_field(name="Notifications go to", value=st["notify_target"])
+            embed.add_field(name="🇨🇦 Canada →", value=st["notify_target"])
+            embed.add_field(name="🇺🇸 United States →", value=st["notify_target_us"])
             embed.add_field(name="Jobs stored", value=str(st["jobs"]))
             embed.add_field(name="DMs sent", value=str(st["notified"]))
             embed.add_field(name="Pending DMs", value=str(st["pending"]))
@@ -138,8 +141,10 @@ class RadarBot(discord.Client):
                 embed.add_field(name="Config warnings", value="\n".join(st["config_errors"])[:1024], inline=False)
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        @tree.command(name="notify_here", description="Post new internships in this channel instead of DMs")
-        async def notify_here(interaction: discord.Interaction):
+        @tree.command(name="notify_here", description="Post new internships in this channel (Canada or US)")
+        @app_commands.describe(region="Canada (default) or United States")
+        @app_commands.choices(region=REGION_CHOICES)
+        async def notify_here(interaction: discord.Interaction, region: app_commands.Choice[str] | None = None):
             if await deny_if_not_owner(interaction):
                 return
             channel = interaction.channel
@@ -153,14 +158,16 @@ class RadarBot(discord.Client):
                 await interaction.response.send_message(
                     f"I can't post here yet — missing permission(s): {', '.join(missing)}.", ephemeral=True)
                 return
-            res = app.set_notify_channel(interaction.user.id, channel.id)
+            res = app.set_notify_channel(interaction.user.id, channel.id, region.value if region else "CA")
             await interaction.response.send_message(res.message, ephemeral=True)
 
-        @tree.command(name="notify_dm", description="Send new internships to your DMs instead of a channel")
-        async def notify_dm(interaction: discord.Interaction):
+        @tree.command(name="notify_dm", description="Canada: back to DMs · United States: stop posting US internships")
+        @app_commands.describe(region="Canada (default) or United States")
+        @app_commands.choices(region=REGION_CHOICES)
+        async def notify_dm(interaction: discord.Interaction, region: app_commands.Choice[str] | None = None):
             if await deny_if_not_owner(interaction):
                 return
-            res = app.set_notify_channel(interaction.user.id, None)
+            res = app.set_notify_channel(interaction.user.id, None, region.value if region else "CA")
             await interaction.response.send_message(res.message, ephemeral=True)
 
         @tree.command(name="scan", description="Run a job scan now")
@@ -177,12 +184,13 @@ class RadarBot(discord.Client):
 
         @tree.command(name="latest", description="Show the most recently discovered matching jobs")
         @app_commands.describe(count="Jobs per page (1-25)", page="Page number (1 = newest)",
-                               province="Only Québec, only Ontario, or elsewhere",
+                               province="Only Québec, only Ontario, elsewhere in Canada, or the US",
                                session="Only winter, summer or fall internships")
         @app_commands.choices(
             province=[app_commands.Choice(name="🔵 Québec (QC)", value="QC"),
                       app_commands.Choice(name="🔴 Ontario (ON)", value="ON"),
-                      app_commands.Choice(name="⚪ Ailleurs / autres", value="OTHER")],
+                      app_commands.Choice(name="⚪ Ailleurs au Canada", value="OTHER"),
+                      app_commands.Choice(name="🇺🇸 États-Unis", value="US")],
             session=[app_commands.Choice(name="❄️ Hiver", value="Winter"),
                      app_commands.Choice(name="☀️ Été", value="Summer"),
                      app_commands.Choice(name="🍂 Automne", value="Fall")])
@@ -225,11 +233,17 @@ class RadarBot(discord.Client):
                 file=discord.File(io.BytesIO(data), filename=name), ephemeral=True)
 
         @tree.command(name="test_notification", description="Send a test notification (channel or DM)")
-        async def test_notification(interaction: discord.Interaction):
+        @app_commands.describe(region="Canada (default) or United States channel")
+        @app_commands.choices(region=REGION_CHOICES)
+        async def test_notification(interaction: discord.Interaction, region: app_commands.Choice[str] | None = None):
             if await deny_if_not_owner(interaction):
                 return
             try:
-                target = await app.notifier.send_test(str(interaction.user.id))
+                if region and region.value == "US" and not app.notifier.channel_id("US"):
+                    await interaction.response.send_message(
+                        "No US channel yet: run /notify_here region:United States in that channel.", ephemeral=True)
+                    return
+                target = await app.notifier.send_test(str(interaction.user.id), region.value if region else "CA")
                 if target.startswith(CHANNEL_PREFIX):
                     msg = f"Test message posted in <#{target[len(CHANNEL_PREFIX):]}>."
                 else:

@@ -58,16 +58,22 @@ class SmartRecruitersSource(Source):
 
     async def fetch(self, http: HttpClient, ctx: FetchContext) -> list[Job]:
         raws: list[dict] = []
-        for page in range(self.max_pages):
-            params = {"limit": 100, "offset": page * 100}
-            if self.country:
-                params["country"] = self.country
-            data = await http.get_json(API.format(company=self.name), params=params)
-            if not isinstance(data, dict) or "content" not in data:
-                raise SourceFetchError(f"Unexpected SmartRecruiters payload for {self.name!r}")
-            raws.extend(data["content"] or [])
-            if len(data["content"] or []) < 100 or len(raws) >= (data.get("totalFound") or 0):
-                break
+        countries = [self.country] if self.country else [None]
+        if ctx.include_us and self.country and self.country.lower() == "ca":
+            countries.append("us")
+        for country in countries:
+            got: list[dict] = []
+            for page in range(self.max_pages):
+                params = {"limit": 100, "offset": page * 100}
+                if country:
+                    params["country"] = country
+                data = await http.get_json(API.format(company=self.name), params=params)
+                if not isinstance(data, dict) or "content" not in data:
+                    raise SourceFetchError(f"Unexpected SmartRecruiters payload for {self.name!r}")
+                got.extend(data["content"] or [])
+                if len(data["content"] or []) < 100 or len(got) >= (data.get("totalFound") or 0):
+                    break
+            raws.extend(got)
         candidates = [r for r in raws if r.get("id") and looks_like_student_role(r.get("name", "")
                       + " " + ((r.get("experienceLevel") or {}).get("id") or ""))]
         jobs: list[Job] = []
