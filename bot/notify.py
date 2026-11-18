@@ -75,6 +75,13 @@ def build_job_embed(job: JobRow, tz: str = "America/Toronto") -> discord.Embed:
     return embed
 
 
+def notification_text(job: JobRow) -> str:
+    """Plain first line of the message. Phone notifications (lock / home screen) only show this text,
+    not the embed, so the company comes first: "Lyft — Software Engineer Intern · 🔵 QC · ☀️ Été 2027"."""
+    tags = tag_line(job.provinces, job.country, job.term, job.workplace)
+    return truncate(f"{job.company} — {job.title} · {tags}", 300)
+
+
 def _short_description(job: JobRow) -> str:
     desc = (job.description or "").strip()
     if not desc:
@@ -152,7 +159,7 @@ class Notifier:
             delivered = True
             for uid in subscribers:
                 try:
-                    await self.send(uid, {"embed": embed})
+                    await self.send(uid, {"content": notification_text(job), "embed": embed})
                 except Exception as exc:
                     delivered = False
                     log.warning("Notification to %s failed for job %s: %s", uid, job.id, exc)
@@ -188,5 +195,5 @@ class Notifier:
                          f"{'in this channel' if channel else 'here'}."),
             color=0x2ECC71,
         )
-        await self.send(target, {"embed": embed})
+        await self.send(target, {"content": "✅ Test notification — this is how new internships will appear", "embed": embed})
         return target

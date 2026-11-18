@@ -206,3 +206,23 @@ def test_status_hides_errors_from_disabled_sources(settings, db):
     app = RadarApp(settings, send=send, db=db, sources=[GreenhouseSource(board="lyft")], http=None)
     app.subscribe(1)
     assert app.status(1)["failing_sources"] == [("greenhouse:lyft", "HTTP 500")]
+
+
+async def test_phone_notification_text_starts_with_company(settings, db):
+    """Lock-screen / home-screen notifications only show the message text, not the embed."""
+    from bot.classify import FilterConfig, classify
+    from bot.notify import Notifier, notification_text
+    from tests.conftest import NOW, make_job
+
+    job = make_job(company="Lyft", title="Software Engineer Intern, Backend (Summer 2027)", location="Montréal, QC")
+    db.insert_job(job, classify(job, FilterConfig(), now=NOW), now=NOW)
+    sent = []
+
+    async def send(target, payload):
+        sent.append(payload)
+
+    db.subscribe(1)
+    assert await Notifier(db, settings, send, pause=0).deliver_pending() == 1
+    text = sent[0]["content"]
+    assert text.startswith("Lyft — Software Engineer Intern, Backend") and "🔵 QC" in text and "Été 2027" in text
+    assert text == notification_text(db.latest_jobs()[0]) and sent[0]["embed"].url
